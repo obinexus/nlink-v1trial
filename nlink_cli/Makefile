@@ -1,4 +1,4 @@
-# Makefile for NexusLink CLI Configuration Parser
+# Makefile for NexusLink CLI Library + Executable
 # Aegis Project - Phase 1 Implementation
 # Author: Nnamdi Michael Okpala & Development Team
 
@@ -8,263 +8,219 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -O2 -g
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -O2 -g -fPIC
 LDFLAGS = -lpthread
 INCLUDES = -I./include
 
-# Project structure
-TARGET = nlink
-BUILD_DIR = build
-SRC_DIRS = core cli
-INCLUDE_DIRS = include/core include/cli
+# Target configuration
+LIBRARY_NAME = nlink
+EXECUTABLE_NAME = nlink
+STATIC_LIB = lib/lib$(LIBRARY_NAME).a
+SHARED_LIB = lib/lib$(LIBRARY_NAME).so
+EXECUTABLE = bin/$(EXECUTABLE_NAME)
 
-# Source files
-CORE_SOURCES = core/config.c
-CLI_SOURCES = cli/parser_interface.c
-ALL_SOURCES = $(CORE_SOURCES) $(CLI_SOURCES)
+# Build directories
+BUILD_DIR = build
+LIB_BUILD_DIR = $(BUILD_DIR)/lib
+SRC_BUILD_DIR = $(BUILD_DIR)/src
+
+# Library source files
+LIB_CORE_SOURCES = core/config.c
+LIB_CLI_SOURCES = cli/parser_interface_lib.c
+LIB_SOURCES = $(LIB_CORE_SOURCES) $(LIB_CLI_SOURCES)
+
+# Executable source files
+EXE_SOURCES = src/main.c
 
 # Object files
-CORE_OBJECTS = $(BUILD_DIR)/core/config.o
-CLI_OBJECTS = $(BUILD_DIR)/cli/parser_interface.o
-ALL_OBJECTS = $(CORE_OBJECTS) $(CLI_OBJECTS)
+LIB_CORE_OBJECTS = $(LIB_BUILD_DIR)/config.o
+LIB_CLI_OBJECTS = $(LIB_BUILD_DIR)/parser_interface_lib.o
+LIB_OBJECTS = $(LIB_CORE_OBJECTS) $(LIB_CLI_OBJECTS)
+
+EXE_OBJECTS = $(SRC_BUILD_DIR)/main.o
 
 # Header dependencies
-CORE_HEADERS = include/core/config.h
-CLI_HEADERS = include/cli/parser_interface.h
-ALL_HEADERS = $(CORE_HEADERS) $(CLI_HEADERS)
+HEADERS = include/nlink/core/config.h include/nlink/cli/parser_interface.h
 
 # =============================================================================
-# BUILD TARGETS
+# PRIMARY BUILD TARGETS
 # =============================================================================
 
-# Default target
 .PHONY: all
-all: $(TARGET)
+all: $(STATIC_LIB) $(SHARED_LIB) $(EXECUTABLE)
 
-# Main executable target
-$(TARGET): $(ALL_OBJECTS)
-	@echo "[NLINK BUILD] Linking executable: $(TARGET)"
-	$(CC) $(ALL_OBJECTS) $(LDFLAGS) -o $(TARGET)
-	@echo "[NLINK SUCCESS] Build completed: $(TARGET)"
+# Static library target
+$(STATIC_LIB): $(LIB_OBJECTS) | lib
+	@echo "[NLINK BUILD] Creating static library: $(STATIC_LIB)"
+	ar rcs $(STATIC_LIB) $(LIB_OBJECTS)
+	@echo "[NLINK SUCCESS] Static library created: $(STATIC_LIB)"
 
-# Core module compilation
-$(BUILD_DIR)/core/config.o: core/config.c $(CORE_HEADERS) | $(BUILD_DIR)/core
-	@echo "[NLINK BUILD] Compiling core configuration module"
-	$(CC) $(CFLAGS) $(INCLUDES) -c core/config.c -o $(BUILD_DIR)/core/config.o
+# Shared library target
+$(SHARED_LIB): $(LIB_OBJECTS) | lib
+	@echo "[NLINK BUILD] Creating shared library: $(SHARED_LIB)"
+	$(CC) -shared $(LIB_OBJECTS) $(LDFLAGS) -o $(SHARED_LIB)
+	@echo "[NLINK SUCCESS] Shared library created: $(SHARED_LIB)"
 
-# CLI module compilation
-$(BUILD_DIR)/cli/parser_interface.o: cli/parser_interface.c $(CLI_HEADERS) $(CORE_HEADERS) | $(BUILD_DIR)/cli
-	@echo "[NLINK BUILD] Compiling CLI parser interface module"
-	$(CC) $(CFLAGS) $(INCLUDES) -c cli/parser_interface.c -o $(BUILD_DIR)/cli/parser_interface.o
+# Executable target (using static library)
+$(EXECUTABLE): $(EXE_OBJECTS) $(STATIC_LIB) | bin
+	@echo "[NLINK BUILD] Linking executable: $(EXECUTABLE)"
+	$(CC) $(EXE_OBJECTS) -L./lib -l$(LIBRARY_NAME) $(LDFLAGS) -o $(EXECUTABLE)
+	@echo "[NLINK SUCCESS] Executable created: $(EXECUTABLE)"
 
-# Build directory creation
-$(BUILD_DIR)/core:
-	@echo "[NLINK BUILD] Creating build directories"
-	mkdir -p $(BUILD_DIR)/core
-
-$(BUILD_DIR)/cli:
-	mkdir -p $(BUILD_DIR)/cli
+# Alternative executable using shared library
+.PHONY: executable-shared
+executable-shared: $(EXE_OBJECTS) $(SHARED_LIB) | bin
+	@echo "[NLINK BUILD] Linking executable with shared library"
+	$(CC) $(EXE_OBJECTS) -L./lib -l$(LIBRARY_NAME) $(LDFLAGS) -o $(EXECUTABLE)
 
 # =============================================================================
-# DEVELOPMENT AND TESTING TARGETS
+# OBJECT FILE COMPILATION
 # =============================================================================
 
-# Debug build with additional symbols
+# Library object files
+$(LIB_BUILD_DIR)/config.o: core/config.c $(HEADERS) | $(LIB_BUILD_DIR)
+	@echo "[NLINK BUILD] Compiling library core module"
+	$(CC) $(CFLAGS) $(INCLUDES) -c core/config.c -o $(LIB_BUILD_DIR)/config.o
+
+$(LIB_BUILD_DIR)/parser_interface_lib.o: cli/parser_interface_lib.c $(HEADERS) | $(LIB_BUILD_DIR)
+	@echo "[NLINK BUILD] Compiling library CLI module"
+	$(CC) $(CFLAGS) $(INCLUDES) -c cli/parser_interface_lib.c -o $(LIB_BUILD_DIR)/parser_interface_lib.o
+
+# Executable object files
+$(SRC_BUILD_DIR)/main.o: src/main.c $(HEADERS) | $(SRC_BUILD_DIR)
+	@echo "[NLINK BUILD] Compiling main executable module"
+	$(CC) $(CFLAGS) $(INCLUDES) -c src/main.c -o $(SRC_BUILD_DIR)/main.o
+
+# =============================================================================
+# DIRECTORY CREATION
+# =============================================================================
+
+lib:
+	mkdir -p lib
+
+bin:
+	mkdir -p bin
+
+$(LIB_BUILD_DIR):
+	mkdir -p $(LIB_BUILD_DIR)
+
+$(SRC_BUILD_DIR):
+	mkdir -p $(SRC_BUILD_DIR)
+
+# =============================================================================
+# DEVELOPMENT TARGETS
+# =============================================================================
+
+# Debug build
 .PHONY: debug
 debug: CFLAGS += -DDEBUG -g3 -O0
-debug: $(TARGET)
+debug: all
 
-# Release build with optimizations
+# Release build
 .PHONY: release
 release: CFLAGS += -DNDEBUG -O3 -march=native
-release: $(TARGET)
-
-# Static analysis and code quality
-.PHONY: analyze
-analyze:
-	@echo "[NLINK ANALYZE] Running static analysis"
-	@command -v cppcheck >/dev/null 2>&1 || { echo "cppcheck not found, skipping analysis"; exit 0; }
-	cppcheck --enable=all --std=c99 $(INCLUDES) $(ALL_SOURCES)
-
-# Code formatting with clang-format
-.PHONY: format
-format:
-	@echo "[NLINK FORMAT] Formatting source code"
-	@command -v clang-format >/dev/null 2>&1 || { echo "clang-format not found, skipping formatting"; exit 0; }
-	clang-format -i $(ALL_SOURCES) $(ALL_HEADERS)
+release: all
 
 # =============================================================================
-# TESTING AND VALIDATION TARGETS
+# TESTING TARGETS
 # =============================================================================
 
-# Functional testing with sample configurations
 .PHONY: test
-test: $(TARGET)
-	@echo "[NLINK TEST] Running functional validation tests"
-	@./scripts/run_tests.sh
+test: $(EXECUTABLE)
+	@echo "[NLINK TEST] Running functional tests"
+	LD_LIBRARY_PATH=./lib $(EXECUTABLE) --help
+	LD_LIBRARY_PATH=./lib $(EXECUTABLE) --version
 
-# Integration testing with verbose output
-.PHONY: test-verbose
-test-verbose: $(TARGET)
-	@echo "[NLINK TEST] Running comprehensive integration tests"
-	@./scripts/run_tests.sh --verbose
-
-# Configuration validation test
 .PHONY: test-config
-test-config: $(TARGET)
+test-config: $(EXECUTABLE)
 	@echo "[NLINK TEST] Testing configuration parsing"
-	./$(TARGET) --config-check --verbose || true
-
-# Component discovery test  
-.PHONY: test-discovery
-test-discovery: $(TARGET)
-	@echo "[NLINK TEST] Testing component discovery"
-	./$(TARGET) --discover-components --verbose || true
-
-# Threading validation test
-.PHONY: test-threading
-test-threading: $(TARGET)
-	@echo "[NLINK TEST] Testing threading configuration"
-	./$(TARGET) --validate-threading --verbose || true
+	LD_LIBRARY_PATH=./lib $(EXECUTABLE) --config-check --verbose || true
 
 # =============================================================================
-# INSTALLATION AND PACKAGING TARGETS
+# INSTALLATION TARGETS
 # =============================================================================
 
-# Installation directories
 PREFIX ?= /usr/local
+LIBDIR = $(PREFIX)/lib
 BINDIR = $(PREFIX)/bin
-INCLUDEDIR = $(PREFIX)/include/nlink
-DOCDIR = $(PREFIX)/share/doc/nlink
+INCLUDEDIR = $(PREFIX)/include
 
-# Install target
 .PHONY: install
-install: $(TARGET)
-	@echo "[NLINK INSTALL] Installing to $(PREFIX)"
-	install -d $(BINDIR)
-	install -m 755 $(TARGET) $(BINDIR)
-	install -d $(INCLUDEDIR)/core
-	install -d $(INCLUDEDIR)/cli
-	install -m 644 include/core/*.h $(INCLUDEDIR)/core/
-	install -m 644 include/cli/*.h $(INCLUDEDIR)/cli/
+install: all
+	@echo "[NLINK INSTALL] Installing library and executable"
+	install -d $(LIBDIR) $(BINDIR) $(INCLUDEDIR)
+	install -m 644 $(STATIC_LIB) $(LIBDIR)/
+	install -m 755 $(SHARED_LIB) $(LIBDIR)/
+	install -m 755 $(EXECUTABLE) $(BINDIR)/
+	cp -r include/nlink $(INCLUDEDIR)/
+	ldconfig || true
 	@echo "[NLINK SUCCESS] Installation completed"
 
-# Uninstall target
-.PHONY: uninstall
-uninstall:
-	@echo "[NLINK UNINSTALL] Removing installation"
-	rm -f $(BINDIR)/$(TARGET)
-	rm -rf $(INCLUDEDIR)
-	@echo "[NLINK SUCCESS] Uninstallation completed"
-
-# Package creation
-.PHONY: package
-package: clean release
-	@echo "[NLINK PACKAGE] Creating distribution package"
-	@./scripts/create_package.sh
-
 # =============================================================================
-# MAINTENANCE AND CLEANUP TARGETS
+# CLEANUP TARGETS
 # =============================================================================
 
-# Clean build artifacts
 .PHONY: clean
 clean:
 	@echo "[NLINK CLEAN] Removing build artifacts"
 	rm -rf $(BUILD_DIR)
-	rm -f $(TARGET)
-	rm -f *.o core/*.o cli/*.o
+	rm -rf lib
+	rm -rf bin
 	@echo "[NLINK SUCCESS] Cleanup completed"
 
-# Deep clean including configuration files
 .PHONY: distclean
 distclean: clean
-	@echo "[NLINK DISTCLEAN] Performing deep cleanup"
-	rm -f config.log config.cache
-	rm -rf autom4te.cache
+	rm -f core/*.o cli/*.o src/*.o
 	find . -name "*~" -delete
-	find . -name "*.orig" -delete
-	find . -name "*.rej" -delete
-
-# Show build configuration
-.PHONY: config
-config:
-	@echo "=== NexusLink Build Configuration ==="
-	@echo "Target: $(TARGET)"
-	@echo "Compiler: $(CC)"
-	@echo "CFLAGS: $(CFLAGS)"
-	@echo "LDFLAGS: $(LDFLAGS)"
-	@echo "Includes: $(INCLUDES)"
-	@echo "Sources: $(ALL_SOURCES)"
-	@echo "Objects: $(ALL_OBJECTS)"
-	@echo "Headers: $(ALL_HEADERS)"
-	@echo "=================================="
 
 # =============================================================================
-# HELP AND DOCUMENTATION
+# UTILITY TARGETS
 # =============================================================================
 
-# Display available targets
 .PHONY: help
 help:
-	@echo "NexusLink CLI Configuration Parser - Build System"
+	@echo "NexusLink CLI Library + Executable Build System"
 	@echo "Aegis Project Phase 1 Implementation"
 	@echo ""
-	@echo "Available targets:"
-	@echo "  all          - Build the main executable (default)"
-	@echo "  debug        - Build with debug symbols and reduced optimization"
-	@echo "  release      - Build with full optimization for production"
-	@echo "  clean        - Remove build artifacts and executables"
-	@echo "  distclean    - Deep clean including temporary files"
-	@echo "  test         - Run functional validation tests"
-	@echo "  test-verbose - Run comprehensive integration tests"
-	@echo "  test-config  - Test configuration parsing specifically"
-	@echo "  test-discovery - Test component discovery functionality"
-	@echo "  test-threading - Test threading configuration validation"
-	@echo "  analyze      - Run static code analysis (requires cppcheck)"
-	@echo "  format       - Format source code (requires clang-format)"
-	@echo "  install      - Install to system (default: /usr/local)"
-	@echo "  uninstall    - Remove system installation"
-	@echo "  package      - Create distribution package"
-	@echo "  config       - Display build configuration"
-	@echo "  help         - Display this help message"
-	@echo ""
-	@echo "Environment variables:"
-	@echo "  CC           - Compiler to use (default: gcc)"
-	@echo "  PREFIX       - Installation prefix (default: /usr/local)"
-	@echo "  CFLAGS       - Additional compiler flags"
-	@echo "  LDFLAGS      - Additional linker flags"
+	@echo "Targets:"
+	@echo "  all              - Build static library, shared library, and executable"
+	@echo "  $(STATIC_LIB)   - Build static library only"
+	@echo "  $(SHARED_LIB)   - Build shared library only"
+	@echo "  $(EXECUTABLE)    - Build executable (using static library)"
+	@echo "  executable-shared - Build executable using shared library"
+	@echo "  debug            - Debug build with symbols"
+	@echo "  release          - Optimized release build"
+	@echo "  test             - Run basic functionality tests"
+	@echo "  test-config      - Test configuration parsing"
+	@echo "  install          - Install to system (PREFIX=$(PREFIX))"
+	@echo "  clean            - Remove build artifacts"
+	@echo "  distclean        - Deep cleanup"
+	@echo "  help             - Show this help"
 
 # =============================================================================
 # DEPENDENCY MANAGEMENT
 # =============================================================================
 
 # Automatic dependency generation
--include $(ALL_OBJECTS:.o=.d)
+-include $(LIB_OBJECTS:.o=.d) $(EXE_OBJECTS:.o=.d)
 
-$(BUILD_DIR)/%.d: %.c | $(BUILD_DIR)
+$(LIB_BUILD_DIR)/%.d: %.c | $(LIB_BUILD_DIR)
+	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT $(@:.d=.o) $< > $@
+
+$(SRC_BUILD_DIR)/%.d: src/%.c | $(SRC_BUILD_DIR)
 	@$(CC) $(CFLAGS) $(INCLUDES) -MM -MT $(@:.d=.o) $< > $@
 
 # Force rebuild on Makefile changes
-$(ALL_OBJECTS): Makefile
+$(LIB_OBJECTS) $(EXE_OBJECTS): Makefile
 
-# =============================================================================
-# PLATFORM-SPECIFIC CONFIGURATIONS
-# =============================================================================
-
-# Windows-specific adjustments
+# Platform-specific configurations
 ifeq ($(OS),Windows_NT)
-    TARGET := $(TARGET).exe
+    EXECUTABLE := $(EXECUTABLE).exe
+    SHARED_LIB := $(SHARED_LIB:.so=.dll)
     LDFLAGS += -lws2_32
-    RM = del /Q
-    MKDIR = mkdir
 else
-    # Unix-like systems
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Linux)
         LDFLAGS += -lrt
-    endif
-    ifeq ($(UNAME_S),Darwin)
-        # macOS-specific flags if needed
     endif
 endif
