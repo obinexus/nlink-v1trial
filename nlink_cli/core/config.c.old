@@ -11,16 +11,47 @@
 #define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
 
-#include "nlink/core/config.h"
+#include "core/config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+
+#include "core/config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
+
+#include "core/config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+#include <unistd.h>
+#include <time.h>
+#include "core/config.h"
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
-#include <pthread.h>
 
 // =============================================================================
 // GLOBAL STATE MANAGEMENT
@@ -50,14 +81,12 @@ static bool directory_exists(const char *path) {
 }
 
 /**
- * @brief Safe string copy with bounds checking and proper termination
+ * @brief Safe string copy with bounds checking
  */
 static void safe_strcpy(char *dest, const char *src, size_t dest_size) {
   if (dest && src && dest_size > 0) {
-    size_t src_len = strlen(src);
-    size_t copy_len = (src_len < dest_size - 1) ? src_len : dest_size - 1;
-    memcpy(dest, src, copy_len);
-    dest[copy_len] = '\0';
+    strncpy(dest, src, dest_size - 1);
+    dest[dest_size - 1] = '\0';
   }
 }
 
@@ -104,26 +133,6 @@ static void trim_whitespace(char *str) {
     *end = '\0';
     end--;
   }
-}
-
-/**
- * @brief Safe path construction with buffer overflow protection
- */
-static int safe_path_join(char *dest, size_t dest_size, const char *base, const char *component) {
-  if (!dest || !base || !component || dest_size == 0) {
-    return -1;
-  }
-  
-  size_t base_len = strlen(base);
-  size_t comp_len = strlen(component);
-  
-  // Check if result would fit (base + "/" + component + null terminator)
-  if (base_len + 1 + comp_len + 1 > dest_size) {
-    return -1;  // Would overflow
-  }
-  
-  int result = snprintf(dest, dest_size, "%s/%s", base, component);
-  return (result >= 0 && (size_t)result < dest_size) ? 0 : -1;
 }
 
 // =============================================================================
@@ -189,7 +198,8 @@ nlink_config_result_t nlink_parse_pkg_config(const char *config_path,
 
   // Initialize configuration with defaults
   safe_strcpy(config->project_name, "unknown", sizeof(config->project_name));
-  safe_strcpy(config->project_version, "1.0.0", sizeof(config->project_version));
+  safe_strcpy(config->project_version, "1.0.0",
+              sizeof(config->project_version));
   safe_strcpy(config->entry_point, "main.c", sizeof(config->entry_point));
   config->pass_mode = NLINK_PASS_MODE_SINGLE; // Default to single-pass
 
@@ -203,11 +213,8 @@ nlink_config_result_t nlink_parse_pkg_config(const char *config_path,
 
     // Parse section headers [section_name]
     if (line[0] == '[' && line[strlen(line) - 1] == ']') {
-      size_t section_len = strlen(line) - 2;
-      if (section_len < sizeof(section)) {
-        memcpy(section, line + 1, section_len);
-        section[section_len] = '\0';
-      }
+      strncpy(section, line + 1, strlen(line) - 2);
+      section[strlen(line) - 2] = '\0';
       continue;
     }
 
@@ -227,7 +234,8 @@ nlink_config_result_t nlink_parse_pkg_config(const char *config_path,
       if (strcmp(key, "name") == 0) {
         safe_strcpy(config->project_name, value, sizeof(config->project_name));
       } else if (strcmp(key, "version") == 0) {
-        safe_strcpy(config->project_version, value, sizeof(config->project_version));
+        safe_strcpy(config->project_version, value,
+                    sizeof(config->project_version));
       } else if (strcmp(key, "entry_point") == 0) {
         safe_strcpy(config->entry_point, value, sizeof(config->entry_point));
       }
@@ -255,11 +263,13 @@ nlink_config_result_t nlink_parse_pkg_config(const char *config_path,
       }
     } else if (strcmp(section, "features") == 0) {
       if (config->feature_count < NLINK_MAX_FEATURES) {
-        nlink_feature_toggle_t *feature = &config->features[config->feature_count];
+        nlink_feature_toggle_t *feature =
+            &config->features[config->feature_count];
         safe_strcpy(feature->feature_name, key, sizeof(feature->feature_name));
         feature->is_enabled = (strcmp(value, "true") == 0);
         feature->priority_level = config->feature_count;
-        safe_strcpy(feature->version_constraint, "*", sizeof(feature->version_constraint));
+        safe_strcpy(feature->version_constraint, "*",
+                    sizeof(feature->version_constraint));
         config->feature_count++;
       }
     }
@@ -268,7 +278,8 @@ nlink_config_result_t nlink_parse_pkg_config(const char *config_path,
   fclose(file);
 
   // Store configuration metadata
-  safe_strcpy(config->config_file_path, config_path, sizeof(config->config_file_path));
+  safe_strcpy(config->config_file_path, config_path,
+              sizeof(config->config_file_path));
   clock_gettime(CLOCK_REALTIME, &config->parse_timestamp);
   config->config_checksum = nlink_calculate_config_checksum(config);
 
@@ -295,8 +306,10 @@ nlink_parse_component_config(const char *config_path,
   char section[64] = {0};
 
   // Initialize with defaults
-  safe_strcpy(component_config->component_name, "unknown", sizeof(component_config->component_name));
-  safe_strcpy(component_config->component_version, "1.0.0", sizeof(component_config->component_version));
+  safe_strcpy(component_config->component_name, "unknown",
+              sizeof(component_config->component_name));
+  safe_strcpy(component_config->component_version, "1.0.0",
+              sizeof(component_config->component_version));
   component_config->optimization_level = 2;
   component_config->max_compile_time_seconds = 60;
   component_config->parallel_compilation_allowed = true;
@@ -308,11 +321,8 @@ nlink_parse_component_config(const char *config_path,
       continue;
 
     if (line[0] == '[' && line[strlen(line) - 1] == ']') {
-      size_t section_len = strlen(line) - 2;
-      if (section_len < sizeof(section)) {
-        memcpy(section, line + 1, section_len);
-        section[section_len] = '\0';
-      }
+      strncpy(section, line + 1, strlen(line) - 2);
+      section[strlen(line) - 2] = '\0';
       continue;
     }
 
@@ -328,9 +338,11 @@ nlink_parse_component_config(const char *config_path,
 
     if (strcmp(section, "component") == 0) {
       if (strcmp(key, "name") == 0) {
-        safe_strcpy(component_config->component_name, value, sizeof(component_config->component_name));
+        safe_strcpy(component_config->component_name, value,
+                    sizeof(component_config->component_name));
       } else if (strcmp(key, "version") == 0) {
-        safe_strcpy(component_config->component_version, value, sizeof(component_config->component_version));
+        safe_strcpy(component_config->component_version, value,
+                    sizeof(component_config->component_version));
       }
     } else if (strcmp(section, "compilation") == 0) {
       if (strcmp(key, "optimization_level") == 0) {
@@ -338,7 +350,8 @@ nlink_parse_component_config(const char *config_path,
       } else if (strcmp(key, "max_compile_time") == 0) {
         component_config->max_compile_time_seconds = (uint32_t)atoi(value);
       } else if (strcmp(key, "parallel_allowed") == 0) {
-        component_config->parallel_compilation_allowed = (strcmp(value, "true") == 0);
+        component_config->parallel_compilation_allowed =
+            (strcmp(value, "true") == 0);
       }
     }
   }
@@ -354,9 +367,8 @@ nlink_pass_mode_t nlink_detect_pass_mode(const char *project_root_path) {
 
   // Check for pkg.nlink in root
   char pkg_config_path[NLINK_MAX_PATH_LENGTH];
-  if (safe_path_join(pkg_config_path, sizeof(pkg_config_path), project_root_path, "pkg.nlink") != 0) {
-    return NLINK_PASS_MODE_UNKNOWN;
-  }
+  snprintf(pkg_config_path, sizeof(pkg_config_path), "%s/pkg.nlink",
+           project_root_path);
 
   if (!file_exists(pkg_config_path)) {
     return NLINK_PASS_MODE_UNKNOWN;
@@ -376,24 +388,26 @@ nlink_pass_mode_t nlink_detect_pass_mode(const char *project_root_path) {
         strcmp(entry->d_name, "..") != 0) {
 
       char subdir_path[NLINK_MAX_PATH_LENGTH];
-      if (safe_path_join(subdir_path, sizeof(subdir_path), project_root_path, entry->d_name) != 0) {
-        continue;  // Skip if path too long
-      }
+      snprintf(subdir_path, sizeof(subdir_path), "%s/%s", project_root_path,
+               entry->d_name);
 
       // Check if subdirectory contains source files or nlink.txt
       char nlink_txt_path[NLINK_MAX_PATH_LENGTH];
-      if (safe_path_join(nlink_txt_path, sizeof(nlink_txt_path), subdir_path, "nlink.txt") == 0) {
-        if (file_exists(nlink_txt_path)) {
-          component_folder_count++;
-        }
+      snprintf(nlink_txt_path, sizeof(nlink_txt_path), "%s/nlink.txt",
+               subdir_path);
+
+      if (file_exists(nlink_txt_path)) {
+        component_folder_count++;
       }
     }
   }
 
   closedir(dir);
 
-  // Decision logic: Single component folder = single-pass, multiple = multi-pass
-  return (component_folder_count <= 1) ? NLINK_PASS_MODE_SINGLE : NLINK_PASS_MODE_MULTI;
+  // Decision logic: Single component folder = single-pass, multiple =
+  // multi-pass
+  return (component_folder_count <= 1) ? NLINK_PASS_MODE_SINGLE
+                                       : NLINK_PASS_MODE_MULTI;
 }
 
 int nlink_discover_components(const char *project_root_path,
@@ -416,21 +430,21 @@ int nlink_discover_components(const char *project_root_path,
         strcmp(entry->d_name, "..") != 0) {
 
       char subdir_path[NLINK_MAX_PATH_LENGTH];
-      if (safe_path_join(subdir_path, sizeof(subdir_path), project_root_path, entry->d_name) != 0) {
-        continue;  // Skip if path too long
-      }
+      snprintf(subdir_path, sizeof(subdir_path), "%s/%s", project_root_path,
+               entry->d_name);
 
       char nlink_txt_path[NLINK_MAX_PATH_LENGTH];
-      bool has_nlink_txt = false;
-      if (safe_path_join(nlink_txt_path, sizeof(nlink_txt_path), subdir_path, "nlink.txt") == 0) {
-        has_nlink_txt = file_exists(nlink_txt_path);
-      }
+      snprintf(nlink_txt_path, sizeof(nlink_txt_path), "%s/nlink.txt",
+               subdir_path);
 
-      nlink_component_metadata_t *component = &config->components[discovered_count];
-      safe_strcpy(component->component_name, entry->d_name, sizeof(component->component_name));
-      safe_strcpy(component->component_path, subdir_path, sizeof(component->component_path));
+      nlink_component_metadata_t *component =
+          &config->components[discovered_count];
+      safe_strcpy(component->component_name, entry->d_name,
+                  sizeof(component->component_name));
+      safe_strcpy(component->component_path, subdir_path,
+                  sizeof(component->component_path));
       safe_strcpy(component->version, "1.0.0", sizeof(component->version));
-      component->has_nlink_txt = has_nlink_txt;
+      component->has_nlink_txt = file_exists(nlink_txt_path);
       component->dependency_count = 0;
       component->dependencies = NULL;
 
@@ -495,8 +509,10 @@ uint32_t nlink_calculate_config_checksum(const nlink_pkg_config_t *config) {
     uint32_t feature_count;
   } checksum_data;
 
-  safe_strcpy(checksum_data.project_name, config->project_name, sizeof(checksum_data.project_name));
-  safe_strcpy(checksum_data.entry_point, config->entry_point, sizeof(checksum_data.entry_point));
+  safe_strcpy(checksum_data.project_name, config->project_name,
+              sizeof(checksum_data.project_name));
+  safe_strcpy(checksum_data.entry_point, config->entry_point,
+              sizeof(checksum_data.entry_point));
   checksum_data.pass_mode = config->pass_mode;
   checksum_data.thread_worker_count = config->thread_pool.worker_count;
   checksum_data.feature_count = config->feature_count;
