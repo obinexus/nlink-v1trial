@@ -15,8 +15,9 @@
 
 /**
  * @brief Convert CLI result to appropriate exit code
- * @param result CLI operation result code
- * @return Corresponding system exit code
+ * @param result CLI operation result code from nlink_cli_result_t enum
+ * @return int Exit code where 0 indicates success, 1-7 for specific errors, 
+ *             and 99 for unknown errors
  */
 static int cli_result_to_exit_code(nlink_cli_result_t result) {
   switch (result) {

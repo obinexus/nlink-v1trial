@@ -75,31 +75,7 @@ static nlink_cli_result_t resolve_project_root(nlink_cli_context_t *context,
   return NLINK_CLI_SUCCESS;
 }
 
-/**
- * @brief Convert CLI result to appropriate exit code
- */
-static int cli_result_to_exit_code(nlink_cli_result_t result) {
-  switch (result) {
-  case NLINK_CLI_SUCCESS:
-    return 0;
-  case NLINK_CLI_ERROR_INVALID_ARGUMENTS:
-    return 1;
-  case NLINK_CLI_ERROR_CONFIG_NOT_FOUND:
-    return 2;
-  case NLINK_CLI_ERROR_PARSE_FAILED:
-    return 3;
-  case NLINK_CLI_ERROR_VALIDATION_FAILED:
-    return 4;
-  case NLINK_CLI_ERROR_THREADING_INVALID:
-    return 5;
-  case NLINK_CLI_ERROR_COMPONENT_DISCOVERY_FAILED:
-    return 6;
-  case NLINK_CLI_ERROR_INTERNAL_ERROR:
-    return 7;
-  default:
-    return 99;
-  }
-}
+
 
 // =============================================================================
 // CLI CONTEXT MANAGEMENT IMPLEMENTATION
