@@ -21,6 +21,7 @@
 #include <time.h>
 #include <unistd.h>
 
+
 // =============================================================================
 // CLI VERSION AND BUILD INFORMATION
 // =============================================================================
@@ -56,9 +57,15 @@ static nlink_cli_result_t resolve_project_root(nlink_cli_context_t *context,
     }
   }
 
-  // Construct default configuration file path
-  snprintf(context->config_file_path, NLINK_MAX_PATH_LENGTH, "%s/pkg.nlink",
-           context->project_root_path);
+  // Enhanced path construction with overflow protection
+  int path_result = snprintf(context->config_file_path, 
+                          NLINK_MAX_PATH_LENGTH, 
+                          "%s/pkg.nlink", 
+                          context->project_root_path);
+
+  if (path_result >= NLINK_MAX_PATH_LENGTH) {
+      return NLINK_CLI_ERROR_INVALID_ARGUMENTS;
+  }
 
   NLINK_CLI_VERBOSE(context, "Project root resolved to: %s",
                     context->project_root_path);
