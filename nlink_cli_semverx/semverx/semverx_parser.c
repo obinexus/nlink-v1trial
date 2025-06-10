@@ -8,8 +8,8 @@
 
 #include "semverx/semverx_parser.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+
 
 semverx_range_state_t semverx_parse_range_state(const char *state_str) {
     if (!state_str) return SEMVERX_STATE_INVALID;

@@ -7,9 +7,12 @@
 
 #ifndef SEMVERX_PARSER_H
 #define SEMVERX_PARSER_H
-
 #include <stdbool.h>
-#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
 typedef enum {
     SEMVERX_STATE_LEGACY,
