@@ -248,3 +248,37 @@ help:
 $(BUILD_DIR)/%.d: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MM -MT $(@:.d=.o) $< > $@
+# =============================================================================
+# DEMO PROJECT TARGETS
+# =============================================================================
+
+demo-setup:
+	@echo "[DEMO] Setting up demonstration environment"
+	./setup_demo.sh
+
+examples-build:
+	@echo "[BUILD] Compiling demonstration components"
+	@mkdir -p examples/calculation_pipeline/basic_math/build
+	@mkdir -p examples/calculation_pipeline/advanced_math/build
+	@if [ -f examples/calculation_pipeline/basic_math/src/calculator.c ]; then \
+		gcc -Wall -Wextra -std=c99 examples/calculation_pipeline/basic_math/src/calculator.c \
+		-o examples/calculation_pipeline/basic_math/build/calculator -lm; \
+		echo "✅ Built basic_math calculator"; \
+	fi
+	@if [ -f examples/calculation_pipeline/advanced_math/src/scientific.c ]; then \
+		gcc -Wall -Wextra -std=c99 examples/calculation_pipeline/advanced_math/src/scientific.c \
+		-o examples/calculation_pipeline/advanced_math/build/scientific -lm; \
+		echo "✅ Built advanced_math scientific calculator"; \
+	fi
+
+demo-calculation: all examples-build
+	@echo "[DEMO] Running calculation pipeline demonstration"
+	./scripts/orchestration_demo.sh
+
+demo-validation: all
+	@echo "[DEMO] Running systematic validation"
+	@if [ -f bin/nlink ]; then \
+		bin/nlink --config-check --project-root examples/calculation_pipeline || true; \
+	fi
+
+.PHONY: demo-setup examples-build demo-calculation demo-validation

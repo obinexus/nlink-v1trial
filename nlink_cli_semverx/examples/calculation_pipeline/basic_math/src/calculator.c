@@ -1,19 +1,16 @@
-/*
- * examples/calculation_pipeline/basic_math/src/calculator.c
- * SemVerX Demonstration: Stable Range State Mathematical Component
- * 
- * Demonstrates shared artifact coordination for calculation orchestration
+/**
+ * @file calculator.c
+ * @brief Basic Math Calculator - Stable Range State Component
+ * @author Nnamdi Michael Okpala & Aegis Development Team
+ * @version 1.2.0
  */
-
-#define _GNU_SOURCE
-#define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
-// Stable calculation API (Range State: STABLE)
+// Component metadata for SemVerX coordination
 typedef struct {
     char component_name[64];
     char version[32];
@@ -21,7 +18,6 @@ typedef struct {
     double precision_factor;
 } calculator_metadata_t;
 
-// Component metadata registration
 static calculator_metadata_t metadata = {
     .component_name = "basic_math_calculator",
     .version = "1.2.0",
@@ -54,7 +50,7 @@ double basic_divide(double a, double b) {
     return a / b;
 }
 
-// Component registration function for shared artifact coordination
+// Component registration for shared artifact coordination
 void register_component_metadata(void) {
     printf("[COMPONENT_REGISTRY] Registering: %s v%s (%s)\n", 
            metadata.component_name, metadata.version, metadata.range_state);
@@ -79,19 +75,16 @@ double execute_calculation(const char *operation, double a, double b) {
 int validate_component_compatibility(const char *other_component, const char *other_range_state) {
     printf("[VALIDATION] Checking compatibility with %s (%s)\n", other_component, other_range_state);
     
-    // Stable ↔ Stable compatibility allowed
     if (strcmp(other_range_state, "stable") == 0) {
         printf("[COMPATIBILITY] ALLOWED: Stable ↔ Stable component interaction\n");
         return 1;
     }
     
-    // Stable ↔ Experimental requires validation
     if (strcmp(other_range_state, "experimental") == 0) {
         printf("[COMPATIBILITY] CONDITIONAL: Stable ↔ Experimental requires validation\n");
-        return 0; // Requires explicit validation
+        return 0;
     }
     
-    // Legacy components not allowed
     if (strcmp(other_range_state, "legacy") == 0) {
         printf("[COMPATIBILITY] DENIED: Legacy components not compatible\n");
         return -1;
