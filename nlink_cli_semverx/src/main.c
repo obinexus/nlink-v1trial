@@ -1,13 +1,12 @@
 /**
  * @file main.c
- * @brief NexusLink CLI Main Entry Point - Restructured Architecture
+ * @brief NexusLink CLI Main Entry Point (Fixed Type Definitions)
  * @author Nnamdi Michael Okpala & Aegis Development Team
  * @version 1.5.0
  */
 
 #include "nlink_semverx/nlink_semverx.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include <string.h>
 
 static int cli_result_to_exit_code(nlink_cli_result_t result) {
     switch (result) {
@@ -24,13 +23,14 @@ static int cli_result_to_exit_code(nlink_cli_result_t result) {
 }
 
 int main(int argc, char *argv[]) {
-    nlink_cli_context_t context;
-    nlink_cli_args_t args;
+    // Initialize structures with zero values
+    nlink_cli_context_t context = {0};
+    nlink_cli_args_t args = {0};
 
     printf("=== NexusLink CLI v%s - Systematic Architecture ===\n", NLINK_SEMVERX_VERSION_STRING);
     printf("Aegis Project Phase 1.5 - SemVerX Range State Versioning\n");
-    printf("Architecture: Waterfall Methodology with Systematic Validation\n");
     printf("Author: Nnamdi Michael Okpala & Development Team\n");
+    printf("Architecture: Waterfall Methodology with Systematic Validation\n");
     printf("\n");
 
     // Initialize configuration system
@@ -55,10 +55,10 @@ int main(int argc, char *argv[]) {
         return cli_result_to_exit_code(parse_result);
     }
 
-    // Execute CLI command
+    // Execute CLI command with systematic processing
     nlink_cli_result_t exec_result = nlink_cli_execute(&context, &args);
     
-    // Cleanup resources
+    // Cleanup resources with systematic resource management
     nlink_cli_cleanup(&context);
     nlink_config_destroy();
     
