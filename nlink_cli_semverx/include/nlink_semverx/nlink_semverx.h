@@ -1,6 +1,6 @@
 /**
  * @file nlink_semverx.h
- * @brief NexusLink SemVerX Master Header
+ * @brief NexusLink SemVerX Master Header (With Stubs)
  * @author Nnamdi Michael Okpala & Aegis Development Team
  * @version 1.5.0
  */
@@ -8,24 +8,16 @@
 #ifndef NLINK_SEMVERX_H
 #define NLINK_SEMVERX_H
 
-// Standard includes
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <string.h>
-#include <pthread.h>
-#include <time.h>
 
 // Core functionality
-#include "nlink_semverx/core/types.h"
 #include "nlink_semverx/core/config.h"
-#include "nlink_semverx/core/error_codes.h"
-
-// CLI interface
 #include "nlink_semverx/cli/parser_interface.h"
 
-// SemVerX extensions
+// SemVerX extensions (stub implementation)
 #include "nlink_semverx/semverx/range_state.h"
 #include "nlink_semverx/semverx/compatibility.h"
 
