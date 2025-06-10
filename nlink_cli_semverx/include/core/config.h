@@ -14,7 +14,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
-<parameter name="content">#include <time.h>
+#include <time.h>
 
 // =============================================================================
 // CORE NLINK CONSTANTS (Backward Compatibility)
