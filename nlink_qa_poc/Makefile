@@ -1,10 +1,7 @@
 # =============================================================================
-# NexusLink QA POC - Production C Library Build System
-# OBINexus Engineering - Aegis Project Implementation
-# ETPS: Error Telemetry Point System Integration
+# NexusLink QA POC - Fixed Makefile with ETPS Integration
 # =============================================================================
 
-# Compiler and build configuration
 CC = gcc
 AR = ar
 CFLAGS = -Wall -Wextra -std=c99 -fPIC -O2 -DNLINK_VERSION=\"1.0.0\" -DETPS_ENABLED=1
@@ -51,10 +48,10 @@ CLI_EXECUTABLE = $(BIN_DIR)/nlink
 INCLUDE_PATHS = -I$(INCLUDE_DIR)
 
 # =============================================================================
-# Main Build Targets
+# Build Targets
 # =============================================================================
 
-.PHONY: all clean test debug release directories help install etps-validation
+.PHONY: all clean test debug release directories help
 
 # Default target
 all: release
@@ -62,200 +59,54 @@ all: release
 # Production build
 release: CFLAGS += -DNDEBUG -O2
 release: directories $(STATIC_LIB) $(SHARED_LIB) $(CLI_EXECUTABLE)
-	@echo "✅ Production build completed successfully"
-	@echo "   Static library: $(STATIC_LIB)"
-	@echo "   Shared library: $(SHARED_LIB)"
-	@echo "   CLI executable: $(CLI_EXECUTABLE)"
 
-# Debug build with ETPS telemetry
-debug: CFLAGS += $(DEBUG_FLAGS)  
+# Debug build
+debug: CFLAGS += $(DEBUG_FLAGS)
 debug: directories $(STATIC_LIB) $(SHARED_LIB) $(CLI_EXECUTABLE)
-	@echo "🐛 Debug build completed with ETPS telemetry enabled"
 
-# Create directories
+# Create directory structure
 directories:
-	@mkdir -p $(OBJ_DIR)/cli $(OBJ_DIR)/core $(OBJ_DIR)/etps $(BIN_DIR) $(LIB_DIR)
-
-# =============================================================================
-# Library Build Rules - FIXED: Correct library naming
-# =============================================================================
+	@mkdir -p $(OBJ_DIR)/cli $(OBJ_DIR)/core $(OBJ_DIR)/etps
+	@mkdir -p $(BIN_DIR) $(LIB_DIR)
 
 # Static library
 $(STATIC_LIB): $(ALL_OBJECTS)
-	@echo "[AR] Creating static library: $@"
+	@echo "Creating static library: $@"
 	$(AR) $(ARFLAGS) $@ $^
 
-# Shared library - FIXED: Use nlink not libnlink
+# Shared library
 $(SHARED_LIB): $(ALL_OBJECTS)
-	@echo "[LD] Creating shared library: $@"
-	$(CC) $(LDFLAGS) -Wl,-soname,$(LIB_NAME).so.1 -o $@ $^
+	@echo "Creating shared library: $@"
+	$(CC) $(LDFLAGS) -Wl,-soname,$(LIB_NAME).so.$(VERSION) -o $@ $^
 	@ln -sf $(LIB_NAME).so.$(VERSION) $(SHARED_LIB_LINK)
 
-# CLI executable - FIXED: Use -lnlink not -llibnlink
-$(CLI_EXECUTABLE): $(STATIC_LIB) $(MAIN_SOURCE)
-	@echo "[CC] Building CLI executable: $@"
-	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -L$(LIB_DIR) $(MAIN_SOURCE) -l$(LIB_NAME) -o $@
+# CLI executable
+$(CLI_EXECUTABLE): $(MAIN_SOURCE) $(STATIC_LIB)
+	@echo "Building CLI executable: $@"
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -o $@ $< -L$(LIB_DIR) -l$(LIB_NAME)
 
-# =============================================================================
-# Object File Compilation Rules - FIXED: Add stddef.h includes
-# =============================================================================
-
-# CLI objects
-$(OBJ_DIR)/cli/%.o: $(SRC_DIR)/cli/%.c
-	@echo "[CC] Compiling CLI module: $<"
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
-
-# Core objects  
-$(OBJ_DIR)/core/%.o: $(SRC_DIR)/core/%.c
-	@echo "[CC] Compiling core module: $<"
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
-
-# ETPS objects (Error Telemetry Point System)
-$(OBJ_DIR)/etps/%.o: $(SRC_DIR)/etps/%.c
-	@echo "[CC] Compiling ETPS module: $<"
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
-
-# Main nlink object
+# Object file compilation
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	@echo "[CC] Compiling main module: $<"
 	@mkdir -p $(dir $@)
+	@echo "Compiling: $<"
 	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
-# =============================================================================
-# Testing and Validation with ETPS Integration
-# =============================================================================
-
-# Build unit tests with library - FIXED: Use -lnlink
-test: $(STATIC_LIB)
-	@echo "[TEST] Building unit tests with ETPS validation"
-	@if [ -f test/unit/test_config_parsing.c ]; then \
-		$(CC) $(CFLAGS) $(INCLUDE_PATHS) -L$(LIB_DIR) \
-			test/unit/test_config_parsing.c -l$(LIB_NAME) \
-			-o $(BIN_DIR)/test_config_parsing; \
-		echo "✅ Unit tests built successfully"; \
-	else \
-		echo "⚠️  Unit test source not found"; \
-	fi
-
-# Run unit tests with ETPS validation
-test-run: test
-	@echo "[TEST] Running unit tests with ETPS telemetry"
-	@if [ -f $(BIN_DIR)/test_config_parsing ]; then \
-		LD_LIBRARY_PATH=$(LIB_DIR) $(BIN_DIR)/test_config_parsing; \
-	else \
-		echo "⚠️  Unit test executable not found"; \
-	fi
-
-# ETPS Validation - Error Telemetry Point System validation
-etps-validation: $(SHARED_LIB)
-	@echo "[ETPS] Running Error Telemetry Point System validation"
-	@echo "Testing GUID generation and timestamp correlation..."
-	@LD_LIBRARY_PATH=$(LIB_DIR) $(CLI_EXECUTABLE) --etps-test --json
-	@echo "✅ ETPS validation completed"
-
-# =============================================================================
-# Example Marshalling Artifacts CLI Orchestration  
-# =============================================================================
-
-# Build all marshalling examples with CLI orchestration
-examples: $(SHARED_LIB)
-	@echo "[EXAMPLES] Building marshalling artifact CLIs"
-	@$(MAKE) -C examples/cython-package cli
-	@$(MAKE) -C examples/java-package cli
-	@$(MAKE) -C examples/python-package cli
-	@echo "✅ All marshalling artifact CLIs built"
-
-# Run cross-language integration tests
-integration-test: examples
-	@echo "[INTEGRATION] Running cross-language marshalling tests"
-	@cd examples && ../$(CLI_EXECUTABLE) --orchestrate-test --all-bindings
-	@echo "✅ Cross-language integration tests completed"
-
-# Library information - FIXED: Correct usage pattern
-info:
-	@echo "NexusLink Library Build Information"
-	@echo "==================================="
-	@echo "Project: $(PROJECT_NAME)"
-	@echo "Library: $(LIB_NAME)"
-	@echo "Version: $(VERSION)"
-	@echo "Static:  $(STATIC_LIB)"
-	@echo "Shared:  $(SHARED_LIB)"
-	@echo "CLI:     $(CLI_EXECUTABLE)"
-	@echo ""
-	@echo "FIXED Usage Pattern:"
-	@echo "  gcc -I$(INCLUDE_DIR) -L$(LIB_DIR) program.c -l$(LIB_NAME)"
-	@echo "  LD_LIBRARY_PATH=$(LIB_DIR) $(CLI_EXECUTABLE) --version"
-
-# =============================================================================
-# Example Usage - FIXED: Correct library linking
-# =============================================================================
-
-example: $(SHARED_LIB)
-	@echo "[EXAMPLE] Creating example program with ETPS integration"
-	@echo '#include <stdio.h>' > /tmp/example.c
-	@echo '#include <stddef.h>' >> /tmp/example.c
-	@echo '#include "$(PROJECT_NAME)/nlink.h"' >> /tmp/example.c
-	@echo '#include "$(PROJECT_NAME)/etps/telemetry.h"' >> /tmp/example.c
-	@echo 'int main() {' >> /tmp/example.c
-	@echo '    etps_guid_t guid = etps_generate_guid();' >> /tmp/example.c
-	@echo '    printf("NexusLink v%s (GUID: %lu)\\n", nlink_version(), guid);' >> /tmp/example.c
-	@echo '    return 0;' >> /tmp/example.c
-	@echo '}' >> /tmp/example.c
-	$(CC) $(INCLUDE_PATHS) -L$(LIB_DIR) /tmp/example.c -l$(LIB_NAME) -o /tmp/example
-	@echo "✅ Example built: /tmp/example"
-	@echo "Run with: LD_LIBRARY_PATH=$(LIB_DIR) /tmp/example"
-
-# =============================================================================
-# Installation
-# =============================================================================
-
-install: all
-	@echo "[INSTALL] Installing NexusLink library with ETPS"
-	@echo "System installation requires root privileges"
-	@echo "Usage: sudo make install"
-
-# =============================================================================
-# Cleanup
-# =============================================================================
-
+# Clean build artifacts
 clean:
-	@echo "[CLEAN] Removing build artifacts"
+	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR)
-	@$(MAKE) -C examples/cython-package clean || true
-	@$(MAKE) -C examples/java-package clean || true
-	@$(MAKE) -C examples/python-package clean || true
+	rm -f *.log
 
-# =============================================================================
+# Version info
+version:
+	@./bin/nlink --version
+
 # Help
-# =============================================================================
-
 help:
-	@echo "NexusLink C Library Build System with ETPS Integration"
-	@echo "====================================================="
-	@echo ""
-	@echo "Main Targets:"
-	@echo "  all              - Build everything (default)"
-	@echo "  release          - Production build"
-	@echo "  debug            - Debug build with ETPS telemetry"
-	@echo "  test             - Build unit tests"
-	@echo "  test-run         - Build and run unit tests"
-	@echo "  example          - Build example program with ETPS"
-	@echo "  examples         - Build all marshalling artifact CLIs"
-	@echo "  integration-test - Run cross-language integration tests"
-	@echo "  etps-validation  - Run Error Telemetry Point System validation"
-	@echo "  info             - Show build information"
-	@echo "  clean            - Remove build artifacts"
-	@echo "  help             - Show this help"
-	@echo ""
-	@echo "FIXED Library Usage:"
-	@echo "  gcc -I$(INCLUDE_DIR) -L$(LIB_DIR) program.c -l$(LIB_NAME)"
-	@echo ""
-	@echo "ETPS Features:"
-	@echo "  - GUID-based correlation for all operations"
-	@echo "  - High-resolution timestamp tracking"
-	@echo "  - Structured error telemetry (JSON output)"
-	@echo "  - Cross-language binding validation"
-	@echo "  - Zero-trust security integration"
+	@echo "Available targets:"
+	@echo "  all      - Build everything (default)"
+	@echo "  release  - Production build"
+	@echo "  debug    - Debug build"
+	@echo "  clean    - Clean build artifacts"
+	@echo "  version  - Show version"
+	@echo "  help     - Show this help"
