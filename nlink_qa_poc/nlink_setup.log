@@ -1,0 +1,35 @@
+Initializing setup with ETPS session GUID: 1749855304841284218
+[0;34m[PHASE][0m Environment Validation with ETPS Logging
+{
+  "etps_event": "validation_success",
+  "session_guid": 1749855304841284218,
+  "timestamp": 1749855304852050116,
+  "severity": "info",
+  "component": "environment",
+  "error_code": 0,
+  "message": "Environment validation passed"
+}
+[0;32m[SUCCESS][0m Environment validation completed
+[0;34m[PHASE][0m Creating directory structure with ETPS support
+[0;32m[SUCCESS][0m Directory structure created
+[0;34m[PHASE][0m Fixing core configuration files - CRITICAL size_t fix
+[0;32m[SUCCESS][0m Core configuration files fixed with stddef.h includes
+[0;34m[PHASE][0m Creating ETPS (Error Telemetry Point System)
+[0;32m[SUCCESS][0m ETPS telemetry system created
+[0;34m[PHASE][0m Creating fixed Makefile with correct library naming
+[0;32m[SUCCESS][0m Fixed Makefile created with correct library naming
+[0;34m[PHASE][0m Creating basic source files
+[0;32m[SUCCESS][0m Basic source files created
+[0;34m[PHASE][0m Creating CLI orchestration for marshalling artifacts
+[0;32m[SUCCESS][0m Marshalling CLI orchestration created
+[0;34m[PHASE][0m Building and testing the system
+[0;31m[ERROR][0m Build failed
+{
+  "etps_event": "build_failure",
+  "session_guid": 1749855304841284218,
+  "timestamp": 1749855305328543666,
+  "severity": "error",
+  "component": "build_system",
+  "error_code": 2001,
+  "message": "System build failed"
+}

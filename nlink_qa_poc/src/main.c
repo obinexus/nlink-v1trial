@@ -1,35 +1,33 @@
-/**
- * @file main.c
- * @brief NexusLink CLI Main Entry Point
- */
-
-#include "nlink_qa_poc/nlink.h"
-#include "nlink_qa_poc/cli/parser.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "nlink_qa_poc/core/config.h"
+#include "nlink_qa_poc/etps/telemetry.h"
+
+const char* nlink_version(void) {
+    return "1.0.0";
+}
 
 int main(int argc, char* argv[]) {
-    nlink_cli_args_t args;
+    etps_context_t* ctx = etps_context_create("main");
     
-    int parse_result = nlink_cli_parse(argc, argv, &args);
+    printf("NexusLink QA POC v%s\n", nlink_version());
+    printf("ETPS Session GUID: %lu\n", ctx->session_guid);
     
-    if (parse_result == 1) {
-        /* Help requested */
-        nlink_cli_print_help(argv[0]);
-        nlink_cli_cleanup(&args);
-        return 0;
+    if (argc > 1 && strcmp(argv[1], "--etps-test") == 0) {
+        printf("ETPS Test Mode Enabled\n");
+        ETPS_LOG_ERROR(ctx, ETPS_COMPONENT_CLI, 0, "test", "ETPS test message");
+        
+        if (argc > 2 && strcmp(argv[2], "--json") == 0) {
+            printf("{\n");
+            printf("  \"command\": \"etps-test\",\n");
+            printf("  \"guid\": %lu,\n", ctx->session_guid);
+            printf("  \"timestamp\": %lu,\n", etps_get_timestamp());
+            printf("  \"status\": \"completed\"\n");
+            printf("}\n");
+        }
     }
     
-    if (parse_result < 0) {
-        /* Parse error */
-        printf("Error: Invalid command line arguments\n");
-        nlink_cli_print_help(argv[0]);
-        nlink_cli_cleanup(&args);
-        return 1;
-    }
-    
-    int result = nlink_cli_execute(&args);
-    
-    nlink_cli_cleanup(&args);
-    return result;
+    etps_context_destroy(ctx);
+    return 0;
 }
