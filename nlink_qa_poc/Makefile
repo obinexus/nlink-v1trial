@@ -209,3 +209,24 @@ help:
 	@echo "Cleanup:"
 	@echo "  clean            - Remove build artifacts"
 	@echo "  distclean        - Deep clean all generated files"
+
+# =============================================================================
+# Enhanced Integration Test Targets
+# =============================================================================
+
+integration-tests-verbose: $(INTEGRATION_TESTS)
+	@echo "[INTEGRATION TESTS] Running verbose integration test suite..."
+	@$(INTEGRATION_TESTS) || echo "⚠️  Some integration tests failed - check output above"
+
+test-python-only:
+	@echo "[PYTHON TEST] Testing Python package isolation..."
+	@cd examples/python-package && python3 -c "import sys; sys.path.insert(0, 'src'); from nlink_marshal import create_marshaller; m = create_marshaller(); print('✅ Python package working')"
+
+test-dependencies:
+	@echo "[DEPENDENCY CHECK] Checking system dependencies..."
+	@python3 --version
+	@command -v javac >/dev/null 2>&1 && echo "✅ Java compiler available" || echo "⚠️  Java compiler not found"
+	@python3 -c "import Cython; print('✅ Cython available')" 2>/dev/null || echo "⚠️  Cython not available"
+
+integration-diagnostic: test-dependencies test-python-only integration-tests-verbose
+	@echo "[DIAGNOSTIC] Integration test diagnostic completed"
