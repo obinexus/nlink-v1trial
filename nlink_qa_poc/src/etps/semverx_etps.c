@@ -1,6 +1,8 @@
 /**
+ * =============================================================================
  * OBINexus NexusLink - SemVerX ETPS Implementation
- * Complete component compatibility validation system
+ * Advanced Component Compatibility Validation System
+ * =============================================================================
  */
 
 #define _POSIX_C_SOURCE 199309L
@@ -16,26 +18,27 @@
 #include <errno.h>
 
 #include "nlink_qa_poc/etps/telemetry.h"
+#include "nlink_qa_poc/etps/semverx_etps.h"
 
-// Global state
+// =============================================================================
+// Global ETPS State Management
+// =============================================================================
+
 static bool g_etps_initialized = false;
 static etps_semverx_event_t* g_event_buffer = NULL;
 static size_t g_event_count = 0;
 static size_t g_event_capacity = 1000;
 
-// Utility functions
-static uint64_t generate_timestamp(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
-        return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
-    }
-    return (uint64_t)time(NULL) * 1000000000ULL;
-}
+// =============================================================================
+// Core ETPS System Functions (Fixes linker errors)
+// =============================================================================
 
-// Core ETPS functions
 int etps_init(void) {
-    if (g_etps_initialized) return 0;
+    if (g_etps_initialized) {
+        return 0; // Already initialized
+    }
     
+    // Allocate global event buffer
     g_event_buffer = calloc(g_event_capacity, sizeof(etps_semverx_event_t));
     if (!g_event_buffer) {
         fprintf(stderr, "[ETPS_ERROR] Failed to allocate event buffer\n");
@@ -44,13 +47,17 @@ int etps_init(void) {
     
     g_event_count = 0;
     g_etps_initialized = true;
+    
     printf("[ETPS_INFO] ETPS system initialized successfully\n");
     return 0;
 }
 
 void etps_shutdown(void) {
-    if (!g_etps_initialized) return;
+    if (!g_etps_initialized) {
+        return;
+    }
     
+    // Free global event buffer
     if (g_event_buffer) {
         free(g_event_buffer);
         g_event_buffer = NULL;
@@ -58,6 +65,7 @@ void etps_shutdown(void) {
     
     g_event_count = 0;
     g_etps_initialized = false;
+    
     printf("[ETPS_INFO] ETPS system shutdown complete\n");
 }
 
@@ -65,8 +73,16 @@ bool etps_is_initialized(void) {
     return g_etps_initialized;
 }
 
-uint64_t etps_get_current_timestamp(void) {
-    return generate_timestamp();
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+static uint64_t generate_timestamp(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
+        return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    }
+    return (uint64_t)time(NULL) * 1000000000ULL;
 }
 
 void etps_generate_guid_string(char* buffer) {
@@ -89,48 +105,10 @@ void etps_generate_iso8601_timestamp(char* buffer, size_t max_len) {
     
     time_t now = time(NULL);
     struct tm* utc_tm = gmtime(&now);
+    
     strftime(buffer, max_len, "%Y-%m-%dT%H:%M:%SZ", utc_tm);
 }
 
-etps_context_t* etps_context_create(const char* context_name) {
-    etps_context_t* ctx = malloc(sizeof(etps_context_t));
-    if (!ctx) return NULL;
-    
-    ctx->binding_guid = generate_timestamp();
-    ctx->created_time = generate_timestamp();
-    ctx->last_activity = ctx->created_time;
-    ctx->is_active = true;
-    
-    if (context_name && strlen(context_name) > 0) {
-        strncpy(ctx->context_name, context_name, sizeof(ctx->context_name) - 1);
-        ctx->context_name[sizeof(ctx->context_name) - 1] = '\0';
-    } else {
-        strcpy(ctx->context_name, "unknown");
-    }
-    
-    // Initialize SemVerX extensions
-    memset(ctx->project_root, 0, sizeof(ctx->project_root));
-    ctx->registered_components = NULL;
-    ctx->component_count = 0;
-    ctx->component_capacity = 0;
-    ctx->strict_mode = false;
-    ctx->allow_experimental_stable = false;
-    ctx->auto_migration_enabled = true;
-    
-    return ctx;
-}
-
-void etps_context_destroy(etps_context_t* ctx) {
-    if (ctx) {
-        if (ctx->registered_components) {
-            free(ctx->registered_components);
-        }
-        ctx->is_active = false;
-        free(ctx);
-    }
-}
-
-// String conversion functions
 const char* etps_range_state_to_string(semverx_range_state_t state) {
     switch (state) {
         case SEMVERX_RANGE_LEGACY: return "legacy";
@@ -158,19 +136,29 @@ const char* etps_hotswap_result_to_string(hotswap_result_t result) {
     }
 }
 
-// Component registration
+// =============================================================================
+// Component Management
+// =============================================================================
+
 int etps_register_component(etps_context_t* ctx, const semverx_component_t* component) {
-    if (!ctx || !component) return -1;
+    if (!ctx || !component) {
+        return -1;
+    }
     
+    // Expand component array if needed
     if (ctx->component_count >= ctx->component_capacity) {
-        size_t new_capacity = ctx->component_capacity == 0 ? 8 : ctx->component_capacity * 2;
+        size_t new_capacity = ctx->component_capacity * 2;
         semverx_component_t* new_array = realloc(ctx->registered_components, 
                                                 new_capacity * sizeof(semverx_component_t));
-        if (!new_array) return -1;
+        if (!new_array) {
+            fprintf(stderr, "[ETPS_ERROR] Failed to expand component array\n");
+            return -1;
+        }
         ctx->registered_components = new_array;
         ctx->component_capacity = new_capacity;
     }
     
+    // Add component to registry
     memcpy(&ctx->registered_components[ctx->component_count], component, sizeof(semverx_component_t));
     ctx->component_count++;
     
@@ -180,18 +168,40 @@ int etps_register_component(etps_context_t* ctx, const semverx_component_t* comp
     return 0;
 }
 
-// Compatibility validation
+// =============================================================================
+// SemVerX Compatibility Logic
+// =============================================================================
+
 static bool is_compatible_range_state(semverx_range_state_t source, semverx_range_state_t target, bool strict_mode) {
-    if (source == target) return true;
-    if (strict_mode) return false;
+    // Compatibility matrix:
+    // - Stable can integrate with Stable
+    // - Legacy can integrate with Legacy (but warn)
+    // - Experimental can integrate with Experimental
+    // - Special cases based on strict_mode
     
+    if (source == target) {
+        return true; // Same range state is always compatible
+    }
+    
+    if (strict_mode) {
+        // In strict mode, only exact matches are allowed
+        return false;
+    }
+    
+    // Non-strict compatibility rules
     switch (source) {
         case SEMVERX_RANGE_STABLE:
+            // Stable can use legacy (with warnings)
             return (target == SEMVERX_RANGE_LEGACY);
+            
         case SEMVERX_RANGE_EXPERIMENTAL:
+            // Experimental can use stable or legacy
             return (target == SEMVERX_RANGE_STABLE || target == SEMVERX_RANGE_LEGACY);
+            
         case SEMVERX_RANGE_LEGACY:
+            // Legacy should not integrate with newer components
             return false;
+            
         default:
             return false;
     }
@@ -207,12 +217,13 @@ compatibility_result_t etps_validate_component_compatibility(
         return COMPAT_DENIED;
     }
     
-    // Initialize event
+    // Initialize event structure
     memset(event, 0, sizeof(etps_semverx_event_t));
     etps_generate_guid_string(event->event_id);
     etps_generate_iso8601_timestamp(event->timestamp, sizeof(event->timestamp));
     strcpy(event->layer, "semverx_validation");
     
+    // Copy component information
     memcpy(&event->source_component, source_component, sizeof(semverx_component_t));
     memcpy(&event->target_component, target_component, sizeof(semverx_component_t));
     
@@ -225,22 +236,23 @@ compatibility_result_t etps_validate_component_compatibility(
     
     if (compatible) {
         event->compatibility_result = COMPAT_ALLOWED;
-        event->severity = 1;
+        event->severity = 1; // Info
         snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
                 "Integration allowed: %s (%s) -> %s (%s)",
                 source_component->name, etps_range_state_to_string(source_component->range_state),
                 target_component->name, etps_range_state_to_string(target_component->range_state));
     } else {
+        // Check if it requires validation or is completely denied
         if (source_component->range_state == SEMVERX_RANGE_EXPERIMENTAL &&
             target_component->range_state == SEMVERX_RANGE_STABLE) {
             event->compatibility_result = COMPAT_REQUIRES_VALIDATION;
-            event->severity = 3;
+            event->severity = 3; // Warning
             snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
-                    "WARNING: Experimental component '%s' attempting to integrate with stable '%s'",
+                    "WARNING: Experimental component '%s' attempting to integrate with stable '%s'. Manual validation required.",
                     source_component->name, target_component->name);
         } else {
             event->compatibility_result = COMPAT_DENIED;
-            event->severity = 5;
+            event->severity = 5; // Critical
             snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
                     "DENIED: Incompatible range states - %s (%s) cannot integrate with %s (%s)",
                     source_component->name, etps_range_state_to_string(source_component->range_state),
@@ -248,22 +260,63 @@ compatibility_result_t etps_validate_component_compatibility(
         }
     }
     
+    // Set context information
     strncpy(event->project_path, ctx->project_root, sizeof(event->project_path) - 1);
     strcpy(event->build_target, "default");
     
     return event->compatibility_result;
 }
 
-void etps_emit_semverx_event(etps_context_t* ctx, const etps_semverx_event_t* event) {
-    if (!ctx || !event || !g_etps_initialized) return;
+// =============================================================================
+// Hot-swap Implementation
+// =============================================================================
+
+hotswap_result_t etps_attempt_hotswap(
+    etps_context_t* ctx,
+    const semverx_component_t* source_component,
+    const semverx_component_t* target_component) {
     
+    if (!ctx || !source_component || !target_component) {
+        return HOTSWAP_FAILED;
+    }
+    
+    // Check if hot-swap is enabled for both components
+    if (!source_component->hot_swap_enabled || !target_component->hot_swap_enabled) {
+        return HOTSWAP_NOT_APPLICABLE;
+    }
+    
+    // Check if components are the same (hot-swap within same component family)
+    if (strcmp(source_component->name, target_component->name) != 0) {
+        return HOTSWAP_NOT_APPLICABLE;
+    }
+    
+    // Simulate hot-swap validation (in real implementation, this would check version ranges)
+    printf("[ETPS_INFO] Attempting hot-swap: %s v%s -> v%s\n",
+           source_component->name, source_component->version, target_component->version);
+    
+    // For now, always succeed if hot-swap is enabled and same component
+    return HOTSWAP_SUCCESS;
+}
+
+// =============================================================================
+// Event Emission and Storage
+// =============================================================================
+
+void etps_emit_semverx_event(etps_context_t* ctx, const etps_semverx_event_t* event) {
+    if (!ctx || !event || !g_etps_initialized) {
+        return;
+    }
+    
+    // Store event in global buffer
     if (g_event_count < g_event_capacity) {
         memcpy(&g_event_buffer[g_event_count], event, sizeof(etps_semverx_event_t));
         g_event_count++;
     }
     
+    // Output structured event to console
     printf("\n=== ETPS SemVerX Event ===\n");
     printf("Event ID: %s\n", event->event_id);
+    printf("Timestamp: %s\n", event->timestamp);
     printf("Source: %s v%s (%s)\n", 
            event->source_component.name, 
            event->source_component.version,
@@ -277,102 +330,55 @@ void etps_emit_semverx_event(etps_context_t* ctx, const etps_semverx_event_t* ev
     printf("Recommendation: %s\n", event->migration_recommendation);
     printf("========================\n\n");
     
+    // Also write to stderr if critical
     if (event->severity >= 4) {
         fprintf(stderr, "[ETPS_CRITICAL] %s: %s\n", event->event_id, event->migration_recommendation);
     }
 }
 
-hotswap_result_t etps_attempt_hotswap(
-    etps_context_t* ctx,
-    const semverx_component_t* source_component,
-    const semverx_component_t* target_component) {
-    
-    if (!ctx || !source_component || !target_component) {
-        return HOTSWAP_FAILED;
-    }
-    
-    if (!source_component->hot_swap_enabled || !target_component->hot_swap_enabled) {
-        return HOTSWAP_NOT_APPLICABLE;
-    }
-    
-    if (strcmp(source_component->name, target_component->name) != 0) {
-        return HOTSWAP_NOT_APPLICABLE;
-    }
-    
-    printf("[ETPS_INFO] Hot-swap: %s v%s -> v%s\n",
-           source_component->name, source_component->version, target_component->version);
-    
-    return HOTSWAP_SUCCESS;
-}
+// =============================================================================
+// Project Integration
+// =============================================================================
 
-// CLI functions
-int nlink_cli_validate_compatibility(int argc, char* argv[]) {
-    const char* project_path = (argc > 2) ? argv[2] : ".nlink";
-    
-    printf("🔍 NexusLink SemVerX Compatibility Validation\n");
-    printf("Project: %s\n\n", project_path);
-    
-    int violations = etps_validate_project_compatibility(project_path);
-    
-    if (violations == 0) {
-        printf("✅ All components compatible\n");
-        return 0;
-    } else if (violations > 0) {
-        printf("⚠️  Found %d violations\n", violations);
-        return violations;
-    } else {
-        printf("❌ Validation failed\n");
+int etps_validate_project_compatibility(const char* project_path) {
+    if (!project_path) {
         return -1;
     }
-}
-
-int nlink_cli_semverx_status(int argc, char* argv[]) {
-    (void)argc; (void)argv;
     
-    printf("📊 NexusLink SemVerX Status\n");
-    printf("ETPS Initialized: %s\n", etps_is_initialized() ? "Yes" : "No");
-    printf("Events Recorded: %zu\n", g_event_count);
-    printf("Event Buffer Capacity: %zu\n", g_event_capacity);
+    printf("[ETPS_INFO] Validating project compatibility: %s\n", project_path);
     
-    return 0;
-}
-
-int nlink_cli_migration_plan(int argc, char* argv[]) {
-    const char* output_path = (argc > 2) ? argv[2] : "etps_events.json";
-    
-    printf("📋 Generating Migration Plan\n");
-    
-    etps_context_t* ctx = etps_context_create("migration_plan");
-    if (!ctx) return -1;
-    
-    int result = etps_export_events_json(ctx, output_path);
-    etps_context_destroy(ctx);
-    
-    if (result == 0) {
-        printf("✅ Migration plan exported to %s\n", output_path);
-    } else {
-        printf("❌ Failed to export migration plan\n");
+    // Initialize ETPS if not already done
+    if (!g_etps_initialized) {
+        if (etps_init() != 0) {
+            return -1;
+        }
     }
     
+    // Create context for validation
+    etps_context_t* ctx = etps_context_create("project_validation");
+    if (!ctx) {
+        return -1;
+    }
+    
+    // Set project root
+    strncpy(ctx->project_root, project_path, sizeof(ctx->project_root) - 1);
+    ctx->strict_mode = true; // Use strict mode for project validation
+    
+    // Load components from project file
+    int result = etps_load_project_components(ctx, project_path);
+    
+    etps_context_destroy(ctx);
     return result;
 }
 
-int etps_validate_project_compatibility(const char* project_path) {
-    if (!project_path) return -1;
-    
-    printf("[ETPS_INFO] Validating project: %s\n", project_path);
-    
-    if (!g_etps_initialized) {
-        if (etps_init() != 0) return -1;
+int etps_load_project_components(etps_context_t* ctx, const char* project_path) {
+    if (!ctx || !project_path) {
+        return -1;
     }
     
-    etps_context_t* ctx = etps_context_create("project_validation");
-    if (!ctx) return -1;
+    // For now, register some example components
+    // In real implementation, this would parse .nlink or pkg.nlink files
     
-    strncpy(ctx->project_root, project_path, sizeof(ctx->project_root) - 1);
-    ctx->strict_mode = true;
-    
-    // Register example components for testing
     semverx_component_t calculator = {0};
     strcpy(calculator.name, "calculator");
     strcpy(calculator.version, "1.2.0");
@@ -392,22 +398,28 @@ int etps_validate_project_compatibility(const char* project_path) {
     etps_register_component(ctx, &calculator);
     etps_register_component(ctx, &scientific);
     
+    // Validate cross-component compatibility
     etps_semverx_event_t event;
     compatibility_result_t result = etps_validate_component_compatibility(
         ctx, &calculator, &scientific, &event);
     
     etps_emit_semverx_event(ctx, &event);
     
-    etps_context_destroy(ctx);
     return (result == COMPAT_DENIED) ? 1 : 0;
 }
 
+// =============================================================================
+// JSON Export for CI/CD Integration
+// =============================================================================
+
 int etps_export_events_json(etps_context_t* ctx, const char* output_path) {
-    if (!ctx || !output_path || !g_etps_initialized) return -1;
+    if (!ctx || !output_path || !g_etps_initialized) {
+        return -1;
+    }
     
     FILE* file = fopen(output_path, "w");
     if (!file) {
-        fprintf(stderr, "[ETPS_ERROR] Failed to create file: %s\n", output_path);
+        fprintf(stderr, "[ETPS_ERROR] Failed to create output file: %s\n", output_path);
         return -1;
     }
     
@@ -422,10 +434,23 @@ int etps_export_events_json(etps_context_t* ctx, const char* output_path) {
         fprintf(file, "    {\n");
         fprintf(file, "      \"event_id\": \"%s\",\n", event->event_id);
         fprintf(file, "      \"timestamp\": \"%s\",\n", event->timestamp);
+        fprintf(file, "      \"layer\": \"%s\",\n", event->layer);
+        fprintf(file, "      \"source_component\": {\n");
+        fprintf(file, "        \"name\": \"%s\",\n", event->source_component.name);
+        fprintf(file, "        \"version\": \"%s\",\n", event->source_component.version);
+        fprintf(file, "        \"range_state\": \"%s\"\n", 
+                etps_range_state_to_string(event->source_component.range_state));
+        fprintf(file, "      },\n");
+        fprintf(file, "      \"target_component\": {\n");
+        fprintf(file, "        \"name\": \"%s\",\n", event->target_component.name);
+        fprintf(file, "        \"version\": \"%s\",\n", event->target_component.version);
+        fprintf(file, "        \"range_state\": \"%s\"\n", 
+                etps_range_state_to_string(event->target_component.range_state));
+        fprintf(file, "      },\n");
         fprintf(file, "      \"compatibility_result\": \"%s\",\n", 
                 etps_compatibility_result_to_string(event->compatibility_result));
         fprintf(file, "      \"severity\": %d,\n", event->severity);
-        fprintf(file, "      \"recommendation\": \"%s\"\n", event->migration_recommendation);
+        fprintf(file, "      \"migration_recommendation\": \"%s\"\n", event->migration_recommendation);
         fprintf(file, "    }%s\n", (i < g_event_count - 1) ? "," : "");
     }
     
@@ -433,38 +458,65 @@ int etps_export_events_json(etps_context_t* ctx, const char* output_path) {
     fprintf(file, "}\n");
     
     fclose(file);
+    
+    printf("[ETPS_INFO] Exported %zu events to %s\n", g_event_count, output_path);
     return 0;
 }
 
-// Basic validation functions
-bool etps_validate_input(etps_context_t* ctx, const char* param_name, const void* value, const char* type) {
-    if (!ctx || !param_name || !type) return false;
-    ctx->last_activity = generate_timestamp();
-    return value != NULL;
-}
+// =============================================================================
+// CLI Integration Functions
+// =============================================================================
 
-bool etps_validate_config(etps_context_t* ctx, const char* buffer, size_t size) {
-    if (!ctx || !buffer || size == 0) return false;
-    ctx->last_activity = generate_timestamp();
-    return size <= 1024 * 1024; // 1MB limit
-}
-
-void etps_log_error(etps_context_t* ctx, etps_component_t component, 
-                   etps_error_code_t error_code, const char* function, const char* message) {
-    if (!ctx || !function || !message) return;
+int nlink_cli_validate_compatibility(int argc, char* argv[]) {
+    const char* project_path = (argc > 2) ? argv[2] : ".nlink";
     
-    ctx->last_activity = generate_timestamp();
-    fprintf(stderr, "[ETPS_ERROR] GUID:%lu Component:%d Error:%d Function:%s Message:%s\n", 
-            (unsigned long)ctx->binding_guid, component, error_code, function, message);
-    fflush(stderr);
+    printf("🔍 NexusLink SemVerX Compatibility Validation\n");
+    printf("Project: %s\n\n", project_path);
+    
+    int violations = etps_validate_project_compatibility(project_path);
+    
+    if (violations == 0) {
+        printf("✅ All components compatible - no violations found\n");
+        return 0;
+    } else if (violations > 0) {
+        printf("⚠️  Found %d compatibility violations\n", violations);
+        return violations;
+    } else {
+        printf("❌ Validation failed\n");
+        return -1;
+    }
 }
 
-void etps_log_info(etps_context_t* ctx, etps_component_t component, 
-                  const char* function, const char* message) {
-    if (!ctx || !function || !message) return;
+int nlink_cli_semverx_status(int argc, char* argv[]) {
+    (void)argc; (void)argv; // Suppress unused parameter warnings
     
-    ctx->last_activity = generate_timestamp();
-    printf("[ETPS_INFO] GUID:%lu Component:%d Function:%s Message:%s\n", 
-           (unsigned long)ctx->binding_guid, component, function, message);
-    fflush(stdout);
+    printf("📊 NexusLink SemVerX Status\n");
+    printf("ETPS Initialized: %s\n", etps_is_initialized() ? "Yes" : "No");
+    printf("Events Recorded: %zu\n", g_event_count);
+    printf("Event Buffer Capacity: %zu\n", g_event_capacity);
+    
+    return 0;
+}
+
+int nlink_cli_migration_plan(int argc, char* argv[]) {
+    const char* output_path = (argc > 2) ? argv[2] : "etps_events.json";
+    
+    printf("📋 Generating Migration Plan\n");
+    
+    // Create a dummy context for export
+    etps_context_t* ctx = etps_context_create("migration_plan");
+    if (!ctx) {
+        return -1;
+    }
+    
+    int result = etps_export_events_json(ctx, output_path);
+    etps_context_destroy(ctx);
+    
+    if (result == 0) {
+        printf("✅ Migration plan exported to %s\n", output_path);
+    } else {
+        printf("❌ Failed to export migration plan\n");
+    }
+    
+    return result;
 }
