@@ -1,214 +1,227 @@
 # =============================================================================
-# NexusLink QA POC Makefile
-# OBINexus Engineering - Quality Assurance Build System
+# NexusLink QA POC - Production C Library Build System
+# OBINexus Engineering - Aegis Project Implementation
+# Technical Lead: Nnamdi Michael Okpala
 # =============================================================================
 
+# Compiler and build configuration
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -I./include -pthread
-LDFLAGS = -lpthread
+AR = ar
+CFLAGS = -Wall -Wextra -std=c99 -fPIC -O2 -DNLINK_VERSION=\"1.0.0\"
 DEBUG_FLAGS = -g -DDEBUG -O0
-RELEASE_FLAGS = -O2 -DNDEBUG
+LDFLAGS = -shared
+ARFLAGS = rcs
 
-# Directories
+# Project structure
+PROJECT_NAME = nlink_qa_poc
+LIB_NAME = nlink
+VERSION = 1.0.0
+
+# Directory structure (standard C library layout)
 SRC_DIR = src
-TEST_DIR = test
+INCLUDE_DIR = include
 BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
 BIN_DIR = bin
-EXAMPLES_DIR = examples
+LIB_DIR = lib
 
-# Test executables
-UNIT_TESTS = $(BIN_DIR)/test_config_parsing
-INTEGRATION_TESTS = $(BIN_DIR)/test_cross_language_marshal
+# Header organization
+CLI_HEADERS = $(INCLUDE_DIR)/$(PROJECT_NAME)/cli
+CORE_HEADERS = $(INCLUDE_DIR)/$(PROJECT_NAME)/core
+PUBLIC_HEADERS = $(INCLUDE_DIR)
 
-.PHONY: all clean test unit-tests integration-tests examples help
+# Source file organization
+CLI_SOURCES = $(wildcard $(SRC_DIR)/cli/*.c)
+CORE_SOURCES = $(wildcard $(SRC_DIR)/core/*.c)
+MAIN_SOURCE = $(SRC_DIR)/main.c
+
+# Object file generation
+CLI_OBJECTS = $(CLI_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+CORE_OBJECTS = $(CORE_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+ALL_OBJECTS = $(CLI_OBJECTS) $(CORE_OBJECTS)
+
+# Library targets
+STATIC_LIB = $(LIB_DIR)/lib$(LIB_NAME).a
+SHARED_LIB = $(LIB_DIR)/lib$(LIB_NAME).so.$(VERSION)
+SHARED_LIB_LINK = $(LIB_DIR)/lib$(LIB_NAME).so
+
+# Executable targets
+CLI_EXECUTABLE = $(BIN_DIR)/nlink
+
+# Installation paths (following FHS standards)
+PREFIX = /usr/local
+INSTALL_BIN = $(PREFIX)/bin
+INSTALL_LIB = $(PREFIX)/lib
+INSTALL_INCLUDE = $(PREFIX)/include
+
+# Include paths for compilation
+INCLUDE_PATHS = -I$(INCLUDE_DIR) -I$(CLI_HEADERS) -I$(CORE_HEADERS)
 
 # =============================================================================
-# Main Targets
+# Main Build Targets
 # =============================================================================
 
-all: directories unit-tests integration-tests examples
-	@echo "✅ NexusLink QA POC build completed successfully"
+.PHONY: all clean install uninstall test debug release directories help
 
+# Default target - production build
+all: release
+
+# Production release build
+release: CFLAGS += -DNDEBUG -O2
+release: directories $(STATIC_LIB) $(SHARED_LIB) $(CLI_EXECUTABLE)
+	@echo "✅ Production build completed successfully"
+	@echo "   Static library: $(STATIC_LIB)"
+	@echo "   Shared library: $(SHARED_LIB)"
+	@echo "   CLI executable: $(CLI_EXECUTABLE)"
+
+# Debug build with symbols
+debug: CFLAGS += $(DEBUG_FLAGS)
+debug: directories $(STATIC_LIB) $(SHARED_LIB) $(CLI_EXECUTABLE)
+	@echo "🐛 Debug build completed with symbols"
+
+# Create directory structure
 directories:
-	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
+	@mkdir -p $(OBJ_DIR)/cli $(OBJ_DIR)/core $(BIN_DIR) $(LIB_DIR)
 
 # =============================================================================
-# Test Targets
+# Library Build Targets
 # =============================================================================
 
-unit-tests: $(UNIT_TESTS)
-	@echo "[UNIT TESTS] Running unit test suite..."
-	@$(UNIT_TESTS)
+# Static library (.a) - for static linking
+$(STATIC_LIB): $(ALL_OBJECTS)
+	@echo "[AR] Creating static library: $@"
+	$(AR) $(ARFLAGS) $@ $^
 
-integration-tests: $(INTEGRATION_TESTS)
-	@echo "[INTEGRATION TESTS] Running integration test suite..."
-	@$(INTEGRATION_TESTS)
+# Shared library (.so) - for dynamic linking
+$(SHARED_LIB): $(ALL_OBJECTS)
+	@echo "[LD] Creating shared library: $@"
+	$(CC) $(LDFLAGS) -Wl,-soname,lib$(LIB_NAME).so.1 -o $@ $^
+	@ln -sf lib$(LIB_NAME).so.$(VERSION) $(SHARED_LIB_LINK)
 
-$(BIN_DIR)/test_config_parsing: $(TEST_DIR)/unit/test_config_parsing.c
-	@echo "[BUILD] Compiling unit tests: config parsing"
-	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $< -o $@
-
-$(BIN_DIR)/test_cross_language_marshal: $(TEST_DIR)/integration/test_cross_language_marshal.c
-	@echo "[BUILD] Compiling integration tests: cross-language marshalling"
-	$(CC) $(CFLAGS) $(DEBUG_FLAGS) $< -o $@
-
-# =============================================================================
-# Example Package Targets
-# =============================================================================
-
-examples: build-cython build-java build-python
-	@echo "✅ All example packages built successfully"
-
-build-cython:
-	@echo "[CYTHON] Building Cython package..."
-	@cd $(EXAMPLES_DIR)/cython-package && \
-		python setup.py build_ext --inplace || \
-		echo "⚠️  Cython build requires: pip install cython numpy"
-
-build-java:
-	@echo "[JAVA] Building Java package..."
-	@cd $(EXAMPLES_DIR)/java-package && \
-		mvn compile || \
-		echo "⚠️  Java build requires: Maven installation"
-
-build-python:
-	@echo "[PYTHON] Building Python package..."
-	@cd $(EXAMPLES_DIR)/python-package && \
-		python setup.py build || \
-		echo "⚠️  Python build requires: pip install setuptools"
+# CLI executable linking against our library
+$(CLI_EXECUTABLE): $(STATIC_LIB) $(SRC_DIR)/main.c
+	@echo "[CC] Building CLI executable: $@"
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -L$(LIB_DIR) $(SRC_DIR)/main.c -l$(LIB_NAME) -o $@
 
 # =============================================================================
-# Quality Assurance Targets
+# Object File Compilation Rules
 # =============================================================================
 
-test: unit-tests integration-tests
-	@echo "✅ All tests completed successfully"
+# CLI module objects
+$(OBJ_DIR)/cli/%.o: $(SRC_DIR)/cli/%.c
+	@echo "[CC] Compiling CLI module: $<"
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
-validate: test
-	@echo "[QA VALIDATION] Running comprehensive validation..."
-	@echo "✅ Configuration parsing validation: PASSED"
-	@echo "✅ SemVerX validation: PASSED"
-	@echo "✅ Cross-language integration: PASSED"
-	@echo "✅ Build process specification: PASSED"
-
-coverage:
-	@echo "[COVERAGE] Generating test coverage report..."
-	@echo "Coverage analysis prepared (requires gcov integration)"
-
-static-analysis:
-	@echo "[STATIC ANALYSIS] Running static code analysis..."
-	@command -v cppcheck >/dev/null 2>&1 && \
-		cppcheck --enable=all --std=c99 $(TEST_DIR)/ || \
-		echo "⚠️  Install cppcheck for static analysis"
-
-memory-check:
-	@echo "[MEMORY CHECK] Running memory leak detection..."
-	@command -v valgrind >/dev/null 2>&1 && \
-		valgrind --leak-check=full $(UNIT_TESTS) || \
-		echo "⚠️  Install valgrind for memory checking"
-
-performance-benchmark:
-	@echo "[PERFORMANCE] Running marshalling performance benchmarks..."
-	@echo "Performance benchmarking prepared"
+# Core module objects  
+$(OBJ_DIR)/core/%.o: $(SRC_DIR)/core/%.c
+	@echo "[CC] Compiling core module: $<"
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
 # =============================================================================
-# Validation Targets
+# Installation Targets
 # =============================================================================
 
-validate-nlink-integration:
-	@echo "[NLINK INTEGRATION] Validating NexusLink CLI integration..."
-	@if [ -f ../nlink_cli/bin/nlink ]; then \
-		../nlink_cli/bin/nlink --config-check --project-root . || true; \
-		echo "✅ NexusLink CLI integration validated"; \
+install: all
+	@echo "[INSTALL] Installing NexusLink library system-wide"
+	install -d $(INSTALL_BIN) $(INSTALL_LIB) $(INSTALL_INCLUDE)
+	install -m 755 $(CLI_EXECUTABLE) $(INSTALL_BIN)/
+	install -m 644 $(STATIC_LIB) $(INSTALL_LIB)/
+	install -m 755 $(SHARED_LIB) $(INSTALL_LIB)/
+	ln -sf lib$(LIB_NAME).so.$(VERSION) $(INSTALL_LIB)/lib$(LIB_NAME).so
+	cp -r $(INCLUDE_DIR)/* $(INSTALL_INCLUDE)/
+	@echo "✅ Installation completed"
+	@echo "   Usage: gcc -lnlink your_program.c"
+
+uninstall:
+	@echo "[UNINSTALL] Removing NexusLink library"
+	rm -f $(INSTALL_BIN)/nlink
+	rm -f $(INSTALL_LIB)/lib$(LIB_NAME).*
+	rm -rf $(INSTALL_INCLUDE)/$(PROJECT_NAME)
+	@echo "✅ Uninstallation completed"
+
+# =============================================================================
+# Development and Testing Targets
+# =============================================================================
+
+# Example usage demonstration
+example: $(SHARED_LIB)
+	@echo "[EXAMPLE] Demonstrating library usage"
+	@echo 'int main() { return 0; }' > /tmp/example.c
+	$(CC) $(INCLUDE_PATHS) -L$(LIB_DIR) /tmp/example.c -l$(LIB_NAME) -o /tmp/example
+	@echo "✅ Example compilation successful: gcc -I$(INCLUDE_DIR) -L$(LIB_DIR) program.c -l$(LIB_NAME)"
+
+# Library information
+info:
+	@echo "NexusLink Library Build Information"
+	@echo "==================================="
+	@echo "Project: $(PROJECT_NAME)"
+	@echo "Library: lib$(LIB_NAME)"
+	@echo "Version: $(VERSION)"
+	@echo "Static:  $(STATIC_LIB)"
+	@echo "Shared:  $(SHARED_LIB)"
+	@echo "CLI:     $(CLI_EXECUTABLE)"
+	@echo ""
+	@echo "Usage Examples:"
+	@echo "  Static linking:  gcc -I$(INCLUDE_DIR) -L$(LIB_DIR) program.c -l$(LIB_NAME)"
+	@echo "  Dynamic linking: gcc -I$(INCLUDE_DIR) -L$(LIB_DIR) program.c -l$(LIB_NAME)"
+	@echo "  Header include:  #include <$(PROJECT_NAME)/cli/parser.h>"
+	@echo "  Header include:  #include <$(PROJECT_NAME)/core/config.h>"
+
+# =============================================================================
+# Quality Assurance Integration
+# =============================================================================
+
+# Test with proper library linking
+test-library: $(SHARED_LIB)
+	@echo "[TEST] Testing library functionality"
+	@if [ -f test/unit/test_config_parsing.c ]; then \
+		$(CC) $(CFLAGS) $(INCLUDE_PATHS) -L$(LIB_DIR) \
+			test/unit/test_config_parsing.c -l$(LIB_NAME) \
+			-o $(BIN_DIR)/test_with_library && \
+		$(BIN_DIR)/test_with_library && \
+		echo "✅ Library tests passed"; \
 	else \
-		echo "⚠️  Build NexusLink CLI first: cd ../nlink_cli && make all"; \
+		echo "⚠️  No unit tests found"; \
 	fi
 
-validate-semverx:
-	@echo "[SEMVERX] Validating SemVerX compliance across packages..."
-	@echo "✅ Cython package v1.1.0: COMPLIANT"
-	@echo "✅ Java package v1.2.0: COMPLIANT"
-	@echo "✅ Python package v1.0.0: COMPLIANT"
-
-validate-cross-language:
-	@echo "[CROSS-LANGUAGE] Validating cross-language compatibility..."
-	@echo "Header compatibility: C ↔ Java ↔ Python ↔ Cython"
-	@echo "Checksum algorithms: SHA-256 across all implementations"
-	@echo "Byte order: Little-endian standardized"
-	@echo "✅ Cross-language validation: PASSED"
+# Validate library symbols
+check-symbols: $(SHARED_LIB)
+	@echo "[SYMBOLS] Checking exported library symbols"
+	@nm -D $(SHARED_LIB) | grep -E '(nlink|marshal|config)' || echo "No matching symbols found"
+	@objdump -T $(SHARED_LIB) | head -20
 
 # =============================================================================
-# Package Management
-# =============================================================================
-
-install-python-deps:
-	@echo "[DEPS] Installing Python dependencies..."
-	pip install cython numpy setuptools wheel
-
-install-java-deps:
-	@echo "[DEPS] Java dependencies managed by Maven"
-	@cd $(EXAMPLES_DIR)/java-package && mvn dependency:resolve
-
-install-all-deps: install-python-deps install-java-deps
-	@echo "✅ All dependencies installed"
-
-# =============================================================================
-# Cleanup
+# Cleanup Targets
 # =============================================================================
 
 clean:
-	@echo "[CLEAN] Cleaning build artifacts..."
-	rm -rf $(BUILD_DIR) $(BIN_DIR)
-	@cd $(EXAMPLES_DIR)/cython-package && rm -rf build/ *.so || true
-	@cd $(EXAMPLES_DIR)/java-package && mvn clean || true
-	@cd $(EXAMPLES_DIR)/python-package && rm -rf build/ dist/ *.egg-info || true
+	@echo "[CLEAN] Removing build artifacts"
+	rm -rf $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR)
 
 distclean: clean
-	@echo "[DISTCLEAN] Deep cleaning all generated files..."
-	@find . -name "*.pyc" -delete
-	@find . -name "__pycache__" -type d -exec rm -rf {} + || true
-	@find . -name "*.class" -delete
+	@echo "[DISTCLEAN] Deep cleaning"
+	find . -name "*.o" -delete
+	find . -name "*.a" -delete  
+	find . -name "*.so*" -delete
+	find . -name "*~" -delete
 
 # =============================================================================
-# Help
+# Help and Documentation
 # =============================================================================
 
 help:
-	@echo "NexusLink QA POC Build System"
-	@echo "============================"
+	@echo "NexusLink C Library Build System"
+	@echo "================================"
 	@echo ""
-	@echo "Main Targets:"
-	@echo "  all              - Build everything (tests + examples)"
-	@echo "  test             - Run all tests (unit + integration)"
-	@echo "  examples         - Build all example packages"
-	@echo "  validate         - Run comprehensive QA validation"
-	@echo ""
-	@echo "Test Targets:"
-	@echo "  unit-tests       - Run unit tests only"
-	@echo "  integration-tests - Run integration tests only"
-	@echo "  coverage         - Generate test coverage report"
-	@echo "  memory-check     - Run memory leak detection"
-	@echo ""
-	@echo "Example Targets:"
-	@echo "  build-cython     - Build Cython marshalling package"
-	@echo "  build-java       - Build Java marshalling package"
-	@echo "  build-python     - Build Python marshalling package"
-	@echo ""
-	@echo "Quality Assurance:"
-	@echo "  validate-nlink-integration  - Test NexusLink CLI integration"
-	@echo "  validate-semverx            - Validate SemVerX compliance"
-	@echo "  validate-cross-language     - Test cross-language compatibility"
-	@echo "  static-analysis             - Run static code analysis"
-	@echo "  performance-benchmark       - Run performance tests"
-	@echo ""
-	@echo "Dependencies:"
-	@echo "  install-python-deps - Install Python/Cython dependencies"
-	@echo "  install-java-deps   - Resolve Java/Maven dependencies"
-	@echo "  install-all-deps    - Install all dependencies"
-	@echo ""
-	@echo "Cleanup:"
+	@echo "Build Targets:"
+	@echo "  all              - Production build (default)"
+	@echo "  release          - Optimized production build"
+	@echo "  debug            - Debug build with symbols"
 	@echo "  clean            - Remove build artifacts"
 	@echo "  distclean        - Deep clean all generated files"
+<<<<<<< HEAD
 
 # =============================================================================
 # Enhanced Integration Test Targets
@@ -230,3 +243,35 @@ test-dependencies:
 
 integration-diagnostic: test-dependencies test-python-only integration-tests-verbose
 	@echo "[DIAGNOSTIC] Integration test diagnostic completed"
+=======
+	@echo ""
+	@echo "Library Targets:"
+	@echo "  $(STATIC_LIB)   - Static library"
+	@echo "  $(SHARED_LIB)   - Shared library"
+	@echo "  $(CLI_EXECUTABLE)        - CLI executable"
+	@echo ""
+	@echo "Installation:"
+	@echo "  install          - Install system-wide"
+	@echo "  uninstall        - Remove system installation"
+	@echo ""
+	@echo "Development:"
+	@echo "  example          - Demonstrate library usage"
+	@echo "  info             - Show build information"
+	@echo "  test-library     - Test library functionality"
+	@echo "  check-symbols    - Validate exported symbols"
+	@echo ""
+	@echo "Usage after build:"
+	@echo "  gcc -I$(INCLUDE_DIR) -L$(LIB_DIR) program.c -l$(LIB_NAME)"
+	@echo "  #include <$(PROJECT_NAME)/cli/parser.h>"
+	@echo "  #include <$(PROJECT_NAME)/core/config.h>"
+
+# =============================================================================
+# Dependency tracking (automatic header dependencies)
+# =============================================================================
+
+-include $(ALL_OBJECTS:.o=.d)
+
+$(OBJ_DIR)/%.d: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) $(INCLUDE_PATHS) -MM -MT $(@:.d=.o) $< > $@
+>>>>>>> dev
