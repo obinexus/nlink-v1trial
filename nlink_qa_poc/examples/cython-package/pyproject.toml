@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=61.0", "cython>=3.0.0", "numpy>=1.19.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nlink-data-marshal-cython"
+version = "1.1.0"
+description = "NexusLink Zero-Overhead Data Marshalling (Cython Implementation)"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "OBINexus Engineering Team", email = "engineering@obinexus.com"}
+]
+maintainers = [
+    {name = "Nnamdi Michael Okpala", email = "nnamdi@obinexus.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License", 
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+    "Topic :: Scientific/Engineering :: Mathematics"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.19.0",
+    "cython>=3.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=21.0",
+    "flake8>=3.8",
+    "mypy>=0.812",
+    "benchmark-runner>=1.0"
+]
+test = [
+    "pytest>=6.0",
+    "numpy-testing>=1.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/obinexus/nlink-poc"
+Documentation = "https://docs.obinexus.com/nlink"
+Repository = "https://github.com/obinexus/nlink-poc.git"
+"Bug Tracker" = "https://github.com/obinexus/nlink-poc/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Cython-specific configuration
+[tool.cython]
+language_level = "3"
+boundscheck = false
+wraparound = false
+initializedcheck = false
+cdivision = true
+embedsignature = true
+optimize_simple_math = true
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--verbose --cov=nlink_data_marshal --cov-report=html"
