@@ -2,7 +2,7 @@
 
 # =============================================================================
 # OBINexus NexusLink QA POC - Include Path Systematic Audit & Replace
-# Comprehensive Search and Replace for nlink_qa_poc References
+# Comprehensive Search and Replace for nlink_qa_poc References - FIXED
 # =============================================================================
 
 set -e
@@ -40,7 +40,7 @@ fi
 log_success "Recovery environment validated: $(pwd)"
 
 # =============================================================================
-# Phase 1: Comprehensive Search for nlink_qa_poc References
+# Phase 1: Comprehensive Search for nlink_qa_poc References - FIXED
 # =============================================================================
 
 log_phase "1. Comprehensive search for all nlink_qa_poc references"
@@ -57,69 +57,71 @@ echo "" >> "$AUDIT_REPORT"
 echo "🔍 Scanning for nlink_qa_poc references in source files..."
 echo ""
 
-declare -A INCLUDE_REFS
+# Initialize arrays properly
 declare -a ALL_FILES
 FILE_COUNT=0
 
-# Search in src directory
-if [ -d "src" ]; then
-    while IFS= read -r -d '' file; do
-        if grep -n "nlink_qa_poc" "$file" >/dev/null 2>&1; then
+# Function to scan directory for files with nlink_qa_poc references
+scan_directory() {
+    local dir="$1"
+    local description="$2"
+    
+    if [ ! -d "$dir" ]; then
+        return 0
+    fi
+    
+    log_info "Scanning $description directory: $dir"
+    
+    # Use find with explicit file type checking
+    find "$dir" -type f \( -name "*.c" -o -name "*.h" \) | while read -r file; do
+        if [ -f "$file" ] && grep -q "nlink_qa_poc" "$file" 2>/dev/null; then
             ALL_FILES+=("$file")
             ((FILE_COUNT++))
             
             echo "📄 $file:" | tee -a "$AUDIT_REPORT"
-            grep -n "nlink_qa_poc" "$file" | while read -r line; do
+            grep -n "nlink_qa_poc" "$file" 2>/dev/null | head -10 | while read -r line; do
                 echo "    $line" | tee -a "$AUDIT_REPORT"
-                # Extract include path
-                if [[ "$line" =~ \#include[[:space:]]*[\"<]([^\"<>]*nlink_qa_poc[^\"<>]*)[\"<] ]]; then
-                    include_path="${BASH_REMATCH[1]}"
-                    INCLUDE_REFS["$include_path"]=1
-                fi
             done
             echo "" | tee -a "$AUDIT_REPORT"
         fi
-    done < <(find src -type f \( -name "*.c" -o -name "*.h" \) -print0 2>/dev/null)
-fi
+    done
+}
 
-# Search in include directory
-if [ -d "include" ]; then
-    while IFS= read -r -d '' file; do
-        if grep -n "nlink_qa_poc" "$file" >/dev/null 2>&1; then
-            ALL_FILES+=("$file")
-            ((FILE_COUNT++))
-            
-            echo "📄 $file:" | tee -a "$AUDIT_REPORT"
-            grep -n "nlink_qa_poc" "$file" | while read -r line; do
-                echo "    $line" | tee -a "$AUDIT_REPORT"
-            done
-            echo "" | tee -a "$AUDIT_REPORT"
-        fi
-    done < <(find include -type f \( -name "*.c" -o -name "*.h" \) -print0 2>/dev/null)
-fi
+# Scan directories systematically
+scan_directory "src" "source"
+scan_directory "include" "headers"
+scan_directory "examples" "examples"
+scan_directory "test" "test"
 
-# Search in examples directory
-if [ -d "examples" ]; then
-    while IFS= read -r -d '' file; do
-        if grep -n "nlink_qa_poc" "$file" >/dev/null 2>&1; then
-            ALL_FILES+=("$file")
-            ((FILE_COUNT++))
-            
-            echo "📄 $file:" | tee -a "$AUDIT_REPORT"
-            grep -n "nlink_qa_poc" "$file" | while read -r line; do
-                echo "    $line" | tee -a "$AUDIT_REPORT"
-            done
-            echo "" | tee -a "$AUDIT_REPORT"
-        fi
-    done < <(find examples -type f \( -name "*.c" -o -name "*.h" \) -print0 2>/dev/null)
-fi
+# Alternative approach: Direct find and grep
+echo "📊 Collecting all files with nlink_qa_poc references..."
+
+# Create temporary file list
+TEMP_FILE_LIST=$(mktemp)
+find . -type f \( -name "*.c" -o -name "*.h" \) -exec grep -l "nlink_qa_poc" {} \; 2>/dev/null > "$TEMP_FILE_LIST" || true
+
+# Count files
+FILE_COUNT=$(wc -l < "$TEMP_FILE_LIST")
 
 echo "📊 AUDIT SUMMARY:" | tee -a "$AUDIT_REPORT"
 echo "Files containing nlink_qa_poc references: $FILE_COUNT" | tee -a "$AUDIT_REPORT"
 echo "" | tee -a "$AUDIT_REPORT"
 
+# Process each file
+if [ -s "$TEMP_FILE_LIST" ]; then
+    while IFS= read -r file; do
+        if [ -f "$file" ]; then
+            echo "📄 $file:" | tee -a "$AUDIT_REPORT"
+            grep -n "nlink_qa_poc" "$file" 2>/dev/null | head -10 | while IFS= read -r line; do
+                echo "    $line" | tee -a "$AUDIT_REPORT"
+            done
+            echo "" | tee -a "$AUDIT_REPORT"
+        fi
+    done < "$TEMP_FILE_LIST"
+fi
+
 # =============================================================================
-# Phase 2: Include Path Analysis
+# Phase 2: Include Path Analysis - FIXED
 # =============================================================================
 
 log_phase "2. Include path pattern analysis"
@@ -127,42 +129,31 @@ log_phase "2. Include path pattern analysis"
 echo "🔍 Analyzing include path patterns..." | tee -a "$AUDIT_REPORT"
 echo "" | tee -a "$AUDIT_REPORT"
 
-# Find all unique include patterns
-declare -a UNIQUE_INCLUDES
-while IFS= read -r -d '' file; do
-    while IFS= read -r line; do
-        if [[ "$line" =~ \#include[[:space:]]*[\"<]([^\"<>]*nlink_qa_poc[^\"<>]*)[\"<] ]]; then
-            include_path="${BASH_REMATCH[1]}"
-            # Check if already in array
-            found=0
-            for existing in "${UNIQUE_INCLUDES[@]}"; do
-                if [ "$existing" = "$include_path" ]; then
-                    found=1
-                    break
-                fi
-            done
-            if [ $found -eq 0 ]; then
-                UNIQUE_INCLUDES+=("$include_path")
-            fi
-        fi
-    done < <(grep "#include.*nlink_qa_poc" "$file" 2>/dev/null || true)
-done < <(find . -type f \( -name "*.c" -o -name "*.h" \) -print0 2>/dev/null)
+# Extract unique include patterns using simpler approach
+UNIQUE_INCLUDES_FILE=$(mktemp)
+
+# Find all include statements with nlink_qa_poc
+find . -type f \( -name "*.c" -o -name "*.h" \) -exec grep -h "#include.*nlink_qa_poc" {} \; 2>/dev/null | \
+    sed 's/.*#include[[:space:]]*[<"]\([^<>"]*\)[<>"].*/\1/' | \
+    sort | uniq > "$UNIQUE_INCLUDES_FILE" || true
 
 echo "UNIQUE INCLUDE PATTERNS FOUND:" | tee -a "$AUDIT_REPORT"
-for include in "${UNIQUE_INCLUDES[@]}"; do
-    echo "  📎 #include \"$include\"" | tee -a "$AUDIT_REPORT"
-    
-    # Check if corresponding header exists
-    if [ -f "include/$include" ]; then
-        echo "    ✅ Header exists: include/$include" | tee -a "$AUDIT_REPORT"
-    else
-        echo "    ❌ Header missing: include/$include" | tee -a "$AUDIT_REPORT"
+while IFS= read -r include; do
+    if [ -n "$include" ]; then
+        echo "  📎 #include \"$include\"" | tee -a "$AUDIT_REPORT"
+        
+        # Check if corresponding header exists
+        if [ -f "include/$include" ]; then
+            echo "    ✅ Header exists: include/$include" | tee -a "$AUDIT_REPORT"
+        else
+            echo "    ❌ Header missing: include/$include" | tee -a "$AUDIT_REPORT"
+        fi
     fi
-done
+done < "$UNIQUE_INCLUDES_FILE"
 echo "" | tee -a "$AUDIT_REPORT"
 
 # =============================================================================
-# Phase 3: Missing Header Detection
+# Phase 3: Missing Header Detection - FIXED
 # =============================================================================
 
 log_phase "3. Missing header detection and cataloging"
@@ -170,18 +161,24 @@ log_phase "3. Missing header detection and cataloging"
 echo "🔍 Detecting missing headers..." | tee -a "$AUDIT_REPORT"
 echo "" | tee -a "$AUDIT_REPORT"
 
-declare -a MISSING_HEADERS
-for include in "${UNIQUE_INCLUDES[@]}"; do
-    if [ ! -f "include/$include" ]; then
-        MISSING_HEADERS+=("$include")
-    fi
-done
+# Create missing headers list
+MISSING_HEADERS_FILE=$(mktemp)
 
-if [ ${#MISSING_HEADERS[@]} -gt 0 ]; then
+while IFS= read -r include; do
+    if [ -n "$include" ] && [ ! -f "include/$include" ]; then
+        echo "$include" >> "$MISSING_HEADERS_FILE"
+    fi
+done < "$UNIQUE_INCLUDES_FILE"
+
+MISSING_COUNT=$(wc -l < "$MISSING_HEADERS_FILE" 2>/dev/null || echo "0")
+
+if [ "$MISSING_COUNT" -gt 0 ]; then
     echo "❌ MISSING HEADERS DETECTED:" | tee -a "$AUDIT_REPORT"
-    for header in "${MISSING_HEADERS[@]}"; do
-        echo "  📄 include/$header" | tee -a "$AUDIT_REPORT"
-    done
+    while IFS= read -r header; do
+        if [ -n "$header" ]; then
+            echo "  📄 include/$header" | tee -a "$AUDIT_REPORT"
+        fi
+    done < "$MISSING_HEADERS_FILE"
     echo "" | tee -a "$AUDIT_REPORT"
 else
     echo "✅ All referenced headers are present" | tee -a "$AUDIT_REPORT"
@@ -189,7 +186,7 @@ else
 fi
 
 # =============================================================================
-# Phase 4: Replace Strategy Options
+# Phase 4: Replace Strategy Options - FIXED
 # =============================================================================
 
 log_phase "4. Include path replacement strategy options"
@@ -213,143 +210,106 @@ echo "  Requires: Restructuring include directory to match OBINexus naming" | te
 echo "" | tee -a "$AUDIT_REPORT"
 
 # =============================================================================
-# Phase 5: Interactive Replacement Options
+# Phase 5: Systematic Replacement Execution - FIXED
 # =============================================================================
 
 log_phase "5. Executing systematic replacement"
 
-echo "🔧 Select replacement strategy:"
-echo "1) Remove 'nlink_qa_poc/' prefix (Recommended for OBINexus)"
-echo "2) Keep 'nlink_qa_poc/' prefix and create missing headers"
-echo "3) Replace 'nlink_qa_poc' with 'nlink' (OBINexus standard)"
-echo "4) Generate replacement script only (no changes)"
-echo ""
-
-# For automation, default to option 2 (safest approach)
+# Default to safest strategy (create missing headers)
 STRATEGY=2
 echo "🔧 Selected Strategy: $STRATEGY (Keep nlink_qa_poc prefix, create missing headers)"
 
 case $STRATEGY in
-    1)
-        log_info "Executing Strategy 1: Remove nlink_qa_poc prefix"
-        for file in "${ALL_FILES[@]}"; do
-            if [ -f "$file" ]; then
-                log_info "Processing: $file"
-                sed -i.bak 's/#include[[:space:]]*"\([^"]*\)nlink_qa_poc\/\([^"]*\)"/#include "\2"/g' "$file"
-                # Also handle angle brackets
-                sed -i 's/#include[[:space:]]*<\([^>]*\)nlink_qa_poc\/\([^>]*\)>/#include <\2>/g' "$file"
-            fi
-        done
-        ;;
     2)
         log_info "Executing Strategy 2: Keep prefix, create missing headers"
-        # This strategy requires creating the missing headers
-        for header in "${MISSING_HEADERS[@]}"; do
-            header_dir="include/$(dirname "$header")"
-            header_file="include/$header"
-            
-            log_info "Creating directory: $header_dir"
-            mkdir -p "$header_dir"
-            
-            log_info "Creating placeholder header: $header_file"
-            cat > "$header_file" << EOF
+        
+        # Create missing headers
+        if [ -s "$MISSING_HEADERS_FILE" ]; then
+            while IFS= read -r header; do
+                if [ -n "$header" ]; then
+                    header_dir="include/$(dirname "$header")"
+                    header_file="include/$header"
+                    
+                    log_info "Creating directory: $header_dir"
+                    mkdir -p "$header_dir"
+                    
+                    # Extract header name for guard
+                    header_name=$(basename "$header")
+                    guard_name=$(echo "$header" | tr '[:lower:]/' '[:upper:]_' | sed 's/\.H$/_H/')
+                    
+                    log_info "Creating placeholder header: $header_file"
+                    cat > "$header_file" << EOF
 /**
- * @file $(basename "$header")
+ * @file $header_name
  * @brief Auto-generated header placeholder
+ * @author OBINexus Systematic Recovery
  * @version 1.5.1
- * TODO: Implement proper header content
+ * TODO: Implement proper header content based on source requirements
  */
 
-#ifndef $(echo "$header" | tr '[:lower:]/' '[:upper:]_' | sed 's/\.H$/_H/')
-#define $(echo "$header" | tr '[:lower:]/' '[:upper:]_' | sed 's/\.H$/_H/')
+#ifndef $guard_name
+#define $guard_name
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// TODO: Add proper header content here
+// TODO: Add proper function declarations and type definitions
+// This is a placeholder header created by systematic recovery
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // $(echo "$header" | tr '[:lower:]/' '[:upper:]_' | sed 's/\.H$/_H/')
+#endif // $guard_name
 EOF
-        done
-        ;;
-    3)
-        log_info "Executing Strategy 3: Replace nlink_qa_poc with nlink"
-        for file in "${ALL_FILES[@]}"; do
-            if [ -f "$file" ]; then
-                log_info "Processing: $file"
-                sed -i.bak 's/nlink_qa_poc/nlink/g' "$file"
-            fi
-        done
-        ;;
-    4)
-        log_info "Generating replacement script only"
-        cat > replace_includes.sh << 'EOF'
-#!/bin/bash
-# Generated include path replacement script
-# Run this script to apply systematic replacements
-
-# Strategy 1: Remove nlink_qa_poc prefix
-# find . -name "*.c" -o -name "*.h" | xargs sed -i.bak 's/#include[[:space:]]*"\([^"]*\)nlink_qa_poc\/\([^"]*\)"/#include "\2"/g'
-
-# Strategy 2: Already implemented (create missing headers)
-
-# Strategy 3: Replace nlink_qa_poc with nlink
-# find . -name "*.c" -o -name "*.h" | xargs sed -i.bak 's/nlink_qa_poc/nlink/g'
-EOF
-        chmod +x replace_includes.sh
-        log_success "Generated replace_includes.sh script"
+                fi
+            done < "$MISSING_HEADERS_FILE"
+        else
+            log_info "No missing headers to create"
+        fi
         ;;
 esac
 
 # =============================================================================
-# Phase 6: Validation and Testing
+# Phase 6: Validation and Testing - FIXED
 # =============================================================================
 
 log_phase "6. Post-replacement validation"
 
 echo "🧪 Testing header resolution after changes..."
 
-# Test compilation of a sample file
-cat > test_includes.c << 'EOF'
-// Test file for include path validation
-#include "nlink_qa_poc/core/config.h"
-#include "nlink_qa_poc/core/marshal.h"
-#include "nlink_qa_poc/etps/telemetry.h"
-
-int main() {
-    return 0;
-}
-EOF
-
-if gcc -I include -c test_includes.c -o test_includes.o 2>/dev/null; then
-    log_success "✅ Include path resolution: PASSED"
-    rm -f test_includes.c test_includes.o
-else
-    log_warning "⚠️ Include path resolution: Still has issues"
-    echo "Testing individual headers..."
+# Test compilation of existing headers
+test_header() {
+    local header="$1"
+    local test_file="test_$(basename "$header" .h).c"
     
-    # Test each header individually
-    for header in "${UNIQUE_INCLUDES[@]}"; do
-        echo "#include \"$header\"" > "test_$(basename "$header" .h).c"
-        echo "int main(){return 0;}" >> "test_$(basename "$header" .h).c"
-        
-        if gcc -I include -c "test_$(basename "$header" .h).c" -o "test_$(basename "$header" .h).o" 2>/dev/null; then
-            echo "  ✅ $header: OK"
-        else
-            echo "  ❌ $header: FAILED"
-        fi
-        
-        rm -f "test_$(basename "$header" .h).c" "test_$(basename "$header" .h).o"
-    done
-fi
+    echo "#include \"$header\"" > "$test_file"
+    echo "int main() { return 0; }" >> "$test_file"
+    
+    if gcc -I include -c "$test_file" -o "${test_file%.c}.o" 2>/dev/null; then
+        echo "  ✅ $header: OK"
+        rm -f "$test_file" "${test_file%.c}.o"
+        return 0
+    else
+        echo "  ❌ $header: FAILED"
+        rm -f "$test_file" "${test_file%.c}.o"
+        return 1
+    fi
+}
+
+# Test core headers
+echo "Testing core headers..."
+test_header "nlink_qa_poc/core/config.h" || true
+test_header "nlink_qa_poc/core/marshal.h" || true
+test_header "nlink_qa_poc/etps/telemetry.h" || true
 
 # =============================================================================
-# Phase 7: Summary Report
+# Phase 7: Summary Report - FIXED
 # =============================================================================
 
 log_phase "7. Systematic audit completion summary"
@@ -359,26 +319,28 @@ echo "==========================================================================
 echo "🎯 INCLUDE PATH AUDIT COMPLETION SUMMARY"
 echo "=============================================================================="
 echo "Files processed: $FILE_COUNT" | tee -a "$AUDIT_REPORT"
-echo "Unique include patterns: ${#UNIQUE_INCLUDES[@]}" | tee -a "$AUDIT_REPORT"
-echo "Missing headers detected: ${#MISSING_HEADERS[@]}" | tee -a "$AUDIT_REPORT"
+echo "Missing headers detected: $MISSING_COUNT" | tee -a "$AUDIT_REPORT"
 echo "Strategy applied: $STRATEGY" | tee -a "$AUDIT_REPORT"
 echo "Audit report: $AUDIT_REPORT" | tee -a "$AUDIT_REPORT"
 echo "" | tee -a "$AUDIT_REPORT"
 
-if [ ${#MISSING_HEADERS[@]} -eq 0 ]; then
+if [ "$MISSING_COUNT" -eq 0 ]; then
     echo "✅ All include paths should now resolve correctly" | tee -a "$AUDIT_REPORT"
 else
-    echo "⚠️ Manual review required for complex header dependencies" | tee -a "$AUDIT_REPORT"
+    echo "⚠️ Created $MISSING_COUNT placeholder headers - manual implementation required" | tee -a "$AUDIT_REPORT"
 fi
 
 echo ""
 echo "📋 Next Steps:"
 echo "1. Review audit report: $AUDIT_REPORT"
 echo "2. Test compilation: make clean && make"
-echo "3. Implement missing function bodies in created headers"
+echo "3. Implement missing function bodies in created placeholder headers"
 echo "4. Continue with systematic development"
 echo ""
 echo "🚀 Include path audit and replacement completed"
 echo "=============================================================================="
+
+# Cleanup temporary files
+rm -f "$TEMP_FILE_LIST" "$UNIQUE_INCLUDES_FILE" "$MISSING_HEADERS_FILE" 2>/dev/null || true
 
 log_success "Systematic include path audit completed successfully"

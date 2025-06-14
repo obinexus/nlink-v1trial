@@ -1,6 +1,5 @@
 /**
  * NexusLink Core Library Implementation - Enhanced with SemVerX ETPS
- * WARNING-FREE VERSION - Production Security Standards
  */
 
 #include <stddef.h>
@@ -108,15 +107,12 @@ int nlink_cli_execute(int argc, char* argv[]) {
         sci.range_state = SEMVERX_RANGE_EXPERIMENTAL;
         etps_register_component(g_global_etps_context, &sci);
         
-        // Test validation - FIX: Actually use the result variable
+        // Test validation
         etps_semverx_event_t event;
         compatibility_result_t result = etps_validate_component_compatibility(
             g_global_etps_context, &calc, &sci, &event);
         etps_emit_semverx_event(g_global_etps_context, &event);
         
-        // Use the result to avoid unused variable warning
-        const char* result_str = etps_compatibility_result_to_string(result);
-        printf("Validation result: %s\n", result_str);
         printf("✅ ETPS test completed\n");
         return 0;
     }
