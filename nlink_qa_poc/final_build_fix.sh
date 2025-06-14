@@ -1,6 +1,56 @@
+#!/bin/bash
+
+# =============================================================================
+# OBINexus NexusLink - Final Build Fix
+# Resolves multiple definition errors and library linking issues
+# =============================================================================
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_phase() { echo -e "${BLUE}[PHASE]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+echo "=============================================================================="
+echo "🔧 OBINexus NexusLink - Final Build Fix"
+echo "=============================================================================="
+echo "Issues: Multiple definitions + Library linking errors"
+echo "Solution: Consolidate ETPS implementation + Fix Makefile"
+echo "=============================================================================="
+echo ""
+
+# =============================================================================
+# Phase 1: Clean up conflicting files
+# =============================================================================
+
+log_phase "1. Cleaning up conflicting implementations"
+
+# Remove the conflicting semverx_etps.c (keep functions in main telemetry.c)
+if [ -f "src/etps/semverx_etps.c" ]; then
+    rm src/etps/semverx_etps.c
+    log_success "Removed conflicting semverx_etps.c"
+fi
+
+# Clean build artifacts
+make clean > /dev/null 2>&1 || true
+log_success "Cleaned build artifacts"
+
+# =============================================================================
+# Phase 2: Create unified ETPS implementation
+# =============================================================================
+
+log_phase "2. Creating unified ETPS implementation"
+
+cat > src/etps/telemetry.c << 'EOF'
 /**
- * OBINexus NexusLink ETPS - Warning-Free Implementation
- * Complete SemVerX + Telemetry integration - ZERO warnings for production safety
+ * OBINexus NexusLink ETPS - Unified Implementation
+ * Complete SemVerX + Telemetry integration without conflicts
  */
 
 #define _POSIX_C_SOURCE 199309L
@@ -14,7 +64,6 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <errno.h>
-#include <stdarg.h>
 
 #include "nlink_qa_poc/etps/telemetry.h"
 
@@ -26,33 +75,6 @@ static bool g_etps_initialized = false;
 static etps_semverx_event_t* g_event_buffer = NULL;
 static size_t g_event_count = 0;
 static size_t g_event_capacity = 1000;
-
-// =============================================================================
-// Safe String Utilities (eliminates all strncpy warnings)
-// =============================================================================
-
-static void safe_string_copy(char* dest, const char* src, size_t dest_size) {
-    if (!dest || !src || dest_size == 0) return;
-    
-    size_t src_len = strlen(src);
-    size_t copy_len = (src_len < dest_size - 1) ? src_len : dest_size - 1;
-    
-    memcpy(dest, src, copy_len);
-    dest[copy_len] = '\0';
-}
-
-static int safe_snprintf(char* dest, size_t dest_size, const char* format, ...) {
-    if (!dest || dest_size == 0 || !format) return -1;
-    
-    va_list args;
-    va_start(args, format);
-    int result = vsnprintf(dest, dest_size, format, args);
-    va_end(args);
-    
-    // Ensure null termination
-    dest[dest_size - 1] = '\0';
-    return result;
-}
 
 // =============================================================================
 // Utility Functions
@@ -85,12 +107,12 @@ void etps_generate_guid_string(char* buffer) {
     uint64_t pid = (uint64_t)getpid();
     uint64_t addr = (uint64_t)(uintptr_t)buffer;
     
-    safe_snprintf(buffer, 37, "%08x-%04x-%04x-%04x-%012llx",
-                 (uint32_t)(timestamp & 0xFFFFFFFF),
-                 (uint16_t)((timestamp >> 32) & 0xFFFF),
-                 (uint16_t)(pid & 0xFFFF),
-                 (uint16_t)(addr & 0xFFFF),
-                 (unsigned long long)((timestamp ^ pid ^ addr) & 0xFFFFFFFFFFFFULL));
+    snprintf(buffer, 37, "%08x-%04x-%04x-%04x-%012llx",
+             (uint32_t)(timestamp & 0xFFFFFFFF),
+             (uint16_t)((timestamp >> 32) & 0xFFFF),
+             (uint16_t)(pid & 0xFFFF),
+             (uint16_t)(addr & 0xFFFF),
+             (unsigned long long)((timestamp ^ pid ^ addr) & 0xFFFFFFFFFFFFULL));
 }
 
 void etps_generate_iso8601_timestamp(char* buffer, size_t max_len) {
@@ -147,9 +169,10 @@ etps_context_t* etps_context_create(const char* context_name) {
     ctx->is_active = true;
     
     if (context_name && strlen(context_name) > 0) {
-        safe_string_copy(ctx->context_name, context_name, sizeof(ctx->context_name));
+        strncpy(ctx->context_name, context_name, sizeof(ctx->context_name) - 1);
+        ctx->context_name[sizeof(ctx->context_name) - 1] = '\0';
     } else {
-        safe_string_copy(ctx->context_name, "unknown", sizeof(ctx->context_name));
+        strcpy(ctx->context_name, "unknown");
     }
     
     // Initialize SemVerX extensions
@@ -206,7 +229,7 @@ const char* etps_hotswap_result_to_string(hotswap_result_t result) {
 }
 
 // =============================================================================
-// Component Management (Warning-Free)
+// Component Management
 // =============================================================================
 
 int etps_register_component(etps_context_t* ctx, const semverx_component_t* component) {
@@ -231,7 +254,7 @@ int etps_register_component(etps_context_t* ctx, const semverx_component_t* comp
 }
 
 // =============================================================================
-// SemVerX Compatibility Logic (Warning-Free)
+// SemVerX Compatibility Logic
 // =============================================================================
 
 static bool is_compatible_range_state(semverx_range_state_t source, semverx_range_state_t target, bool strict_mode) {
@@ -260,13 +283,12 @@ compatibility_result_t etps_validate_component_compatibility(
         return COMPAT_DENIED;
     }
     
-    // Initialize event structure completely
+    // Initialize event
     memset(event, 0, sizeof(etps_semverx_event_t));
     etps_generate_guid_string(event->event_id);
     etps_generate_iso8601_timestamp(event->timestamp, sizeof(event->timestamp));
-    safe_string_copy(event->layer, "semverx_validation", sizeof(event->layer));
+    strcpy(event->layer, "semverx_validation");
     
-    // Copy component info safely
     memcpy(&event->source_component, source_component, sizeof(semverx_component_t));
     memcpy(&event->target_component, target_component, sizeof(semverx_component_t));
     
@@ -279,31 +301,30 @@ compatibility_result_t etps_validate_component_compatibility(
     if (compatible) {
         event->compatibility_result = COMPAT_ALLOWED;
         event->severity = 1;
-        safe_snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
-                     "Integration allowed: %s (%s) -> %s (%s)",
-                     source_component->name, etps_range_state_to_string(source_component->range_state),
-                     target_component->name, etps_range_state_to_string(target_component->range_state));
+        snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
+                "Integration allowed: %s (%s) -> %s (%s)",
+                source_component->name, etps_range_state_to_string(source_component->range_state),
+                target_component->name, etps_range_state_to_string(target_component->range_state));
     } else {
         if (source_component->range_state == SEMVERX_RANGE_EXPERIMENTAL &&
             target_component->range_state == SEMVERX_RANGE_STABLE) {
             event->compatibility_result = COMPAT_REQUIRES_VALIDATION;
             event->severity = 3;
-            safe_snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
-                         "WARNING: Experimental '%s' -> stable '%s' requires validation",
-                         source_component->name, target_component->name);
+            snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
+                    "WARNING: Experimental '%s' -> stable '%s' requires validation",
+                    source_component->name, target_component->name);
         } else {
             event->compatibility_result = COMPAT_DENIED;
             event->severity = 5;
-            safe_snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
-                         "DENIED: %s (%s) incompatible with %s (%s)",
-                         source_component->name, etps_range_state_to_string(source_component->range_state),
-                         target_component->name, etps_range_state_to_string(target_component->range_state));
+            snprintf(event->migration_recommendation, sizeof(event->migration_recommendation),
+                    "DENIED: %s (%s) incompatible with %s (%s)",
+                    source_component->name, etps_range_state_to_string(source_component->range_state),
+                    target_component->name, etps_range_state_to_string(target_component->range_state));
         }
     }
     
-    // Safe project path copy
-    safe_string_copy(event->project_path, ctx->project_root, sizeof(event->project_path));
-    safe_string_copy(event->build_target, "default", sizeof(event->build_target));
+    strncpy(event->project_path, ctx->project_root, sizeof(event->project_path) - 1);
+    strcpy(event->build_target, "default");
     
     return event->compatibility_result;
 }
@@ -359,7 +380,7 @@ hotswap_result_t etps_attempt_hotswap(
 }
 
 // =============================================================================
-// Basic Validation Functions (Warning-Free)
+// Basic Validation Functions
 // =============================================================================
 
 bool etps_validate_input(etps_context_t* ctx, const char* param_name, const void* value, const char* type) {
@@ -395,7 +416,7 @@ void etps_log_info(etps_context_t* ctx, etps_component_t component,
 }
 
 // =============================================================================
-// CLI Functions (Warning-Free)
+// CLI Functions
 // =============================================================================
 
 int nlink_cli_validate_compatibility(int argc, char* argv[]) {
@@ -461,23 +482,23 @@ int etps_validate_project_compatibility(const char* project_path) {
     etps_context_t* ctx = etps_context_create("project_validation");
     if (!ctx) return -1;
     
-    safe_string_copy(ctx->project_root, project_path, sizeof(ctx->project_root));
+    strncpy(ctx->project_root, project_path, sizeof(ctx->project_root) - 1);
     ctx->strict_mode = true;
     
-    // Register test components with safe string operations
+    // Register test components
     semverx_component_t calculator = {0};
-    safe_string_copy(calculator.name, "calculator", sizeof(calculator.name));
-    safe_string_copy(calculator.version, "1.2.0", sizeof(calculator.version));
+    strcpy(calculator.name, "calculator");
+    strcpy(calculator.version, "1.2.0");
     calculator.range_state = SEMVERX_RANGE_STABLE;
-    safe_string_copy(calculator.compatible_range, ">=1.0.0 <2.0.0", sizeof(calculator.compatible_range));
+    strcpy(calculator.compatible_range, ">=1.0.0 <2.0.0");
     calculator.hot_swap_enabled = true;
     calculator.component_id = generate_timestamp();
     
     semverx_component_t scientific = {0};
-    safe_string_copy(scientific.name, "scientific", sizeof(scientific.name));
-    safe_string_copy(scientific.version, "0.3.0", sizeof(scientific.version));
+    strcpy(scientific.name, "scientific");
+    strcpy(scientific.version, "0.3.0");
     scientific.range_state = SEMVERX_RANGE_EXPERIMENTAL;
-    safe_string_copy(scientific.compatible_range, ">=0.1.0", sizeof(scientific.compatible_range));
+    strcpy(scientific.compatible_range, ">=0.1.0");
     scientific.hot_swap_enabled = false;
     scientific.component_id = generate_timestamp();
     
@@ -513,3 +534,344 @@ int etps_export_events_json(etps_context_t* ctx, const char* output_path) {
     printf("[ETPS_INFO] Exported %zu events to %s\n", g_event_count, output_path);
     return 0;
 }
+EOF
+
+log_success "Created unified ETPS implementation"
+
+# =============================================================================
+# Phase 3: Fix Makefile for proper library linking
+# =============================================================================
+
+log_phase "3. Fixing Makefile for proper library linking"
+
+cat > Makefile << 'EOF'
+# =============================================================================
+# NexusLink QA POC - Fixed Makefile with Proper Library Linking
+# =============================================================================
+
+CC = gcc
+AR = ar
+CFLAGS = -Wall -Wextra -std=c99 -fPIC -O2 -DNLINK_VERSION=\"1.0.0\" -DETPS_ENABLED=1 -DSEMVERX_ENABLED=1
+DEBUG_FLAGS = -g -DDEBUG -O0
+LDFLAGS = -shared
+ARFLAGS = rcs
+
+# Project configuration
+PROJECT_NAME = nlink_qa_poc
+LIB_NAME = nlink
+VERSION = 1.0.0
+
+# Directory structure
+SRC_DIR = src
+INCLUDE_DIR = include
+BUILD_DIR = build
+OBJ_DIR = $(BUILD_DIR)/obj
+BIN_DIR = bin
+LIB_DIR = lib
+
+# Source files
+CLI_SOURCES = $(wildcard $(SRC_DIR)/cli/*.c)
+CORE_SOURCES = $(wildcard $(SRC_DIR)/core/*.c)
+ETPS_SOURCES = $(wildcard $(SRC_DIR)/etps/*.c)
+MAIN_SOURCE = $(SRC_DIR)/main.c
+NLINK_CORE_SOURCE = $(SRC_DIR)/nlink.c
+
+# Object files
+CLI_OBJECTS = $(CLI_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+CORE_OBJECTS = $(CORE_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+ETPS_OBJECTS = $(ETPS_SOURCES:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+NLINK_CORE_OBJECT = $(NLINK_CORE_SOURCE:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
+ALL_OBJECTS = $(CLI_OBJECTS) $(CORE_OBJECTS) $(ETPS_OBJECTS) $(NLINK_CORE_OBJECT)
+
+# Library targets - FIXED: Use standard naming convention
+STATIC_LIB = $(LIB_DIR)/lib$(LIB_NAME).a
+SHARED_LIB = $(LIB_DIR)/lib$(LIB_NAME).so.$(VERSION)
+SHARED_LIB_LINK = $(LIB_DIR)/lib$(LIB_NAME).so
+
+# Executable
+CLI_EXECUTABLE = $(BIN_DIR)/nlink
+
+# Include paths
+INCLUDE_PATHS = -I$(INCLUDE_DIR)
+
+.PHONY: all clean debug release directories help
+
+# Default target
+all: release
+
+# Production build
+release: CFLAGS += -DNDEBUG -O2
+release: directories $(STATIC_LIB) $(SHARED_LIB) $(CLI_EXECUTABLE)
+
+# Debug build
+debug: CFLAGS += $(DEBUG_FLAGS)
+debug: directories $(STATIC_LIB) $(SHARED_LIB) $(CLI_EXECUTABLE)
+
+# Create directories
+directories:
+	@mkdir -p $(OBJ_DIR)/cli $(OBJ_DIR)/core $(OBJ_DIR)/etps
+	@mkdir -p $(BIN_DIR) $(LIB_DIR)
+
+# Static library
+$(STATIC_LIB): $(ALL_OBJECTS)
+	@echo "📦 Creating static library: $@"
+	$(AR) $(ARFLAGS) $@ $^
+
+# Shared library
+$(SHARED_LIB): $(ALL_OBJECTS)
+	@echo "🔗 Creating shared library: $@"
+	$(CC) $(LDFLAGS) -Wl,-soname,lib$(LIB_NAME).so.$(VERSION) -o $@ $^
+	@ln -sf lib$(LIB_NAME).so.$(VERSION) $(SHARED_LIB_LINK)
+
+# CLI executable - FIXED: Use correct library path
+$(CLI_EXECUTABLE): $(MAIN_SOURCE) $(STATIC_LIB)
+	@echo "⚡ Building CLI executable: $@"
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -o $@ $< -L$(LIB_DIR) -l$(LIB_NAME)
+
+# Object compilation
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(dir $@)
+	@echo "🔨 Compiling: $<"
+	$(CC) $(CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
+
+# Clean
+clean:
+	@echo "🧹 Cleaning build artifacts"
+	rm -rf $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR)
+	rm -f *.log *.json
+
+# Test
+test: all
+	@echo "🧪 Testing ETPS functionality"
+	LD_LIBRARY_PATH=$(LIB_DIR) ./$(CLI_EXECUTABLE) --etps-test
+
+# Help
+help:
+	@echo "Available targets:"
+	@echo "  all      - Build everything (default)"
+	@echo "  release  - Production build"
+	@echo "  debug    - Debug build"
+	@echo "  clean    - Clean artifacts"
+	@echo "  test     - Run tests"
+	@echo "  help     - Show this help"
+EOF
+
+log_success "Fixed Makefile with proper library naming (lib*.a format)"
+
+# =============================================================================
+# Phase 4: Update headers to match implementation
+# =============================================================================
+
+log_phase "4. Updating headers to match unified implementation"
+
+cat > include/nlink_qa_poc/etps/telemetry.h << 'EOF'
+/**
+ * NexusLink ETPS - Unified Header for Complete SemVerX Integration
+ */
+
+#ifndef NLINK_ETPS_TELEMETRY_H
+#define NLINK_ETPS_TELEMETRY_H
+
+#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// =============================================================================
+// SemVerX Types (embedded in main telemetry header)
+// =============================================================================
+
+typedef enum {
+    SEMVERX_RANGE_LEGACY = 1,
+    SEMVERX_RANGE_STABLE = 2,
+    SEMVERX_RANGE_EXPERIMENTAL = 3
+} semverx_range_state_t;
+
+typedef enum {
+    COMPAT_ALLOWED = 1,
+    COMPAT_REQUIRES_VALIDATION = 2,
+    COMPAT_DENIED = 3
+} compatibility_result_t;
+
+typedef enum {
+    HOTSWAP_SUCCESS = 1,
+    HOTSWAP_FAILED = 2,
+    HOTSWAP_NOT_APPLICABLE = 3
+} hotswap_result_t;
+
+typedef struct {
+    char name[64];
+    char version[32];
+    semverx_range_state_t range_state;
+    char compatible_range[128];
+    bool hot_swap_enabled;
+    char migration_policy[64];
+    uint64_t component_id;
+} semverx_component_t;
+
+typedef struct {
+    char event_id[37];
+    char timestamp[32];
+    char layer[32];
+    semverx_component_t source_component;
+    semverx_component_t target_component;
+    compatibility_result_t compatibility_result;
+    bool hot_swap_attempted;
+    hotswap_result_t hot_swap_result;
+    char resolution_policy_triggered[64];
+    int severity;
+    char migration_recommendation[256];
+    char project_path[256];
+    char build_target[64];
+} etps_semverx_event_t;
+
+// =============================================================================
+// ETPS Context Structure
+// =============================================================================
+
+typedef struct etps_context {
+    uint64_t binding_guid;
+    uint64_t created_time;
+    uint64_t last_activity;
+    char context_name[64];
+    bool is_active;
+    char project_root[256];
+    semverx_component_t* registered_components;
+    size_t component_count;
+    size_t component_capacity;
+    bool strict_mode;
+    bool allow_experimental_stable;
+    bool auto_migration_enabled;
+} etps_context_t;
+
+// =============================================================================
+// Basic ETPS Types
+// =============================================================================
+
+typedef enum {
+    ETPS_COMPONENT_CONFIG = 1,
+    ETPS_COMPONENT_CLI = 2,
+    ETPS_COMPONENT_CORE = 3,
+    ETPS_COMPONENT_PARSER = 4
+} etps_component_t;
+
+typedef enum {
+    ETPS_ERROR_NONE = 0,
+    ETPS_ERROR_INVALID_INPUT = 1001,
+    ETPS_ERROR_MEMORY_FAULT = 1002,
+    ETPS_ERROR_CONFIG_PARSE = 1003,
+    ETPS_ERROR_FILE_IO = 1004
+} etps_error_code_t;
+
+// =============================================================================
+// Function Declarations
+// =============================================================================
+
+// Core ETPS functions
+int etps_init(void);
+void etps_shutdown(void);
+bool etps_is_initialized(void);
+etps_context_t* etps_context_create(const char* context_name);
+void etps_context_destroy(etps_context_t* ctx);
+
+// SemVerX functions
+int etps_register_component(etps_context_t* ctx, const semverx_component_t* component);
+compatibility_result_t etps_validate_component_compatibility(
+    etps_context_t* ctx,
+    const semverx_component_t* source_component,
+    const semverx_component_t* target_component,
+    etps_semverx_event_t* event
+);
+void etps_emit_semverx_event(etps_context_t* ctx, const etps_semverx_event_t* event);
+hotswap_result_t etps_attempt_hotswap(
+    etps_context_t* ctx,
+    const semverx_component_t* source_component,
+    const semverx_component_t* target_component
+);
+
+// Utility functions
+uint64_t etps_get_current_timestamp(void);
+const char* etps_range_state_to_string(semverx_range_state_t state);
+const char* etps_compatibility_result_to_string(compatibility_result_t result);
+const char* etps_hotswap_result_to_string(hotswap_result_t result);
+void etps_generate_iso8601_timestamp(char* buffer, size_t max_len);
+void etps_generate_guid_string(char* buffer);
+
+// Basic validation functions
+bool etps_validate_input(etps_context_t* ctx, const char* param_name, 
+                        const void* value, const char* type);
+bool etps_validate_config(etps_context_t* ctx, const char* buffer, size_t size);
+
+// Logging functions
+void etps_log_error(etps_context_t* ctx, etps_component_t component, 
+                   etps_error_code_t error_code, const char* function, const char* message);
+void etps_log_info(etps_context_t* ctx, etps_component_t component, 
+                  const char* function, const char* message);
+
+// CLI functions
+int nlink_cli_validate_compatibility(int argc, char* argv[]);
+int nlink_cli_semverx_status(int argc, char* argv[]);
+int nlink_cli_migration_plan(int argc, char* argv[]);
+int etps_validate_project_compatibility(const char* project_path);
+int etps_export_events_json(etps_context_t* ctx, const char* output_path);
+
+// Logging macros
+#define ETPS_LOG_ERROR(ctx, component, error_code, function, message) \
+    etps_log_error(ctx, component, error_code, function, message)
+
+#define ETPS_LOG_INFO(ctx, component, function, message) \
+    etps_log_info(ctx, component, function, message)
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // NLINK_ETPS_TELEMETRY_H
+EOF
+
+log_success "Updated unified telemetry header"
+
+# =============================================================================
+# Phase 5: Test the build
+# =============================================================================
+
+log_phase "5. Testing unified build"
+
+echo "Building with unified implementation..."
+make clean
+make all
+
+if [ $? -eq 0 ]; then
+    log_success "✅ Build completed successfully!"
+    
+    echo ""
+    echo "Testing executable..."
+    LD_LIBRARY_PATH=lib ./bin/nlink --version
+    
+    echo ""
+    echo "Testing ETPS functionality..."
+    LD_LIBRARY_PATH=lib ./bin/nlink --etps-test
+    
+    echo ""
+    log_success "🎉 All build issues resolved!"
+    
+else
+    log_error "❌ Build failed"
+    exit 1
+fi
+
+echo ""
+echo "=============================================================================="
+echo -e "${GREEN}🎯 Final Build Status - SUCCESS${NC}"
+echo "=============================================================================="
+echo -e "${GREEN}✅ Multiple definition errors:${NC} RESOLVED"
+echo -e "${GREEN}✅ Library linking (-lnlink):${NC} FIXED"
+echo -e "${GREEN}✅ Function declarations:${NC} UNIFIED"
+echo -e "${GREEN}✅ ETPS + SemVerX integration:${NC} COMPLETE"
+echo -e "${GREEN}✅ CLI functionality:${NC} WORKING"
+echo ""
+echo -e "${BLUE}🚀 Ready for OBINexus polybuild integration!${NC}"
+echo "=============================================================================="
